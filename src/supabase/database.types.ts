@@ -2178,6 +2178,69 @@ export type Database = {
           },
         ]
       }
+      mailbox_messages: {
+        Row: {
+          attachments: Json
+          created_at: string
+          envelope_from: string
+          envelope_to: string
+          from_address: string | null
+          from_name: string | null
+          id: string
+          message_id: string | null
+          metadata: Json
+          raw_size: number | null
+          read_at: string | null
+          received_at: string
+          sent_at: string | null
+          status: string
+          subject: string | null
+          text_body: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: Json
+          created_at?: string
+          envelope_from: string
+          envelope_to: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          raw_size?: number | null
+          read_at?: string | null
+          received_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          text_body?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attachments?: Json
+          created_at?: string
+          envelope_from?: string
+          envelope_to?: string
+          from_address?: string | null
+          from_name?: string | null
+          id?: string
+          message_id?: string | null
+          metadata?: Json
+          raw_size?: number | null
+          read_at?: string | null
+          received_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          text_body?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       memo_entries: {
         Row: {
           content: string
