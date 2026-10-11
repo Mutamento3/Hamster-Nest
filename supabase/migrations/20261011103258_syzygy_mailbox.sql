@@ -75,6 +75,8 @@ drop policy if exists mailbox_messages_delete_own on public.mailbox_messages;
 create policy mailbox_messages_delete_own on public.mailbox_messages for delete to authenticated
   using ((select auth.uid()) = user_id);
 
-revoke all on table public.mailbox_messages from anon;
-grant select, update, delete on table public.mailbox_messages to authenticated;
+-- Clear inherited default privileges (including TRUNCATE, which bypasses RLS).
+revoke all on table public.mailbox_messages from public, anon, authenticated;
+grant select, delete on table public.mailbox_messages to authenticated;
+grant update (status, read_at) on table public.mailbox_messages to authenticated;
 grant select, insert, update, delete on table public.mailbox_messages to service_role;
