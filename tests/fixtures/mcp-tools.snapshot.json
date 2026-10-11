@@ -42,6 +42,8 @@
     "lounge_post",
     "lounge_read",
     "lounge_resolve_target",
+    "mailbox_list",
+    "mailbox_read",
     "read_diary",
     "set_diary_lock",
     "share_diary_entry"
