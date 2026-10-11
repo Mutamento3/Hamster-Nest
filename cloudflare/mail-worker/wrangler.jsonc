@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "syzygy-mailbox",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-11",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "MAIL_INGEST_URL": "https://crfhiumxzmaszkapanrb.supabase.co/functions/v1/mail-ingest"
+  }
+}
