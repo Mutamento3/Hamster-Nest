@@ -65,6 +65,9 @@ verify_jwt = false
 [functions.push-dispatch]
 verify_jwt = false
 
+[functions.mail-ingest]
+verify_jwt = false
+
 [functions.conversation-dispatch]
 verify_jwt = false
 import_map = "./functions/conversation-dispatch/deno.json"

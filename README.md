@@ -10,7 +10,7 @@
 
 [![Version](https://img.shields.io/badge/Version-v5.3.0-pink?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-MIT-a3e635?style=flat-square)](./LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-86-2dd4bf?style=flat-square)](#-mcp-工具箱全部-86-个)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-88-2dd4bf?style=flat-square)](#-mcp-工具箱全部-88-个)
 [![Edge Functions](https://img.shields.io/badge/Edge_Functions-19-8b5cf6?style=flat-square)](#-后端-edge-functions)
 [![PRs](https://img.shields.io/badge/PRs-1000+-ff69b4?style=flat-square)](#)
 [![PWA](https://img.shields.io/badge/PWA-可装进手机-f59e0b?style=flat-square)](#)
@@ -111,7 +111,7 @@
 | `hamster-mcp` | 时间轴 · 待办 · Syzygy Feed · 月度概览 · 备忘录 · 事件集 | 23 |
 | `hamster-knowledge-mcp` | 知识库 · 记忆档案 · Wiki · 囤粮处 | 17 |
 | `hamster-reading-mcp` | 阅读记录 · 书摘 · 章节 · 旁批共鸣 · 书籍问答 · 导读/总结 | 18 |
-| `hamster-lounge-mcp` | 仓鼠客厅 · 议事厅 · Syzygy 日记本 | 17 |
+| `hamster-lounge-mcp` | 仓鼠客厅 · 议事厅 · Syzygy 日记本 · 信箱 | 19 |
 | `hamster-life-mcp` | 高德地图 · 瑞幸 · 麦当劳 · TTS 语音 | 7 |
 | `hamster-print-mcp` | Mac mini 动作 · 远程打印 · X/Twitter 发帖 | 4 |
 
@@ -201,13 +201,13 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 ---
 
-### 🧰 MCP 工具箱（全部 86 个）
+### 🧰 MCP 工具箱（全部 88 个）
 
 > 每个 MCP 服务器都是一个独立的 Supabase Edge Function，走 JSON-RPC / MCP Streamable HTTP。
 > 鉴权优先使用 `x-hamster-mcp-key` 请求头（timing-safe 比对）或 Supabase Auth Header；`?key=` 仅为旧客户端迁移期兼容，避免新凭证进入 URL / Access Log。
 > 工具清单与计数以 `npm run mcp:inventory` 的输出为准（`--live` 模式直连已部署 server 拿精确清单）；跨工具的共性约定放在各 server 的 MCP `instructions` 里随握手下发，只读 / 危险操作标注在 `annotations`（readOnlyHint / destructiveHint）。
 
-当前源码工具总数：23 + 17 + 18 + 17 + 7 + 4 = **86**。09-29 自由活动候选新增 `cli_set_self_alarm`；此前线上核验为 85 项，部署后需重新核验。
+当前源码工具总数：23 + 17 + 18 + 19 + 7 + 4 = **88**。09-29 自由活动候选新增 `cli_set_self_alarm`；10-11 信箱新增 `mailbox_list` / `mailbox_read`；此前线上核验为 85 项，部署后需重新核验。
 
 本地 `npm run mcp:inventory -- --json` 的 `toolNamesByServer` 给出「server → 排序后的工具名列表」，包含 reading 工厂展开后的 8 个工具。扫描只解析 TypeScript 源码，不加载或执行 Deno 模块；未知动态注册、重复工具名或扫描失败会以非零状态退出。静态 schema 体积仍是估算，精确体积与部署状态用 `--live` 核对。
 
@@ -314,10 +314,11 @@ npm test
 </details>
 
 <details>
-<summary><b>🛋️ hamster-lounge-mcp</b> — 客厅 · 议事厅 · 日记本（17）</summary>
+<summary><b>🛋️ hamster-lounge-mcp</b> — 客厅 · 议事厅 · 日记本 · 信箱（19）</summary>
 
 > 社交协议：**「不@不开口」**——只有被 @提及（含发送者）才会响应。
 > 日记本：Feed 是写给串串的信，日记本是 Syzygy 写给自己的账——默认 🔒 `private` 上锁（锁的是默认可见性，不是加密）。锁的形式是**暗号制**：每个端口用 `set_diary_lock` 出一道题，串串对上暗号才能读该端口合着的页（不分大小写 / 空白 / 全半角，对上一次服务端记住）；`share_diary_entry` 翻开是单向仪式。论坛工具已下线（板块基本不用了，数据表与页面不动）。
+> 信箱：`syzygy@syzygycc.com` 只收不发，只有白名单里的地址寄得进来（链路见下方 `mail-ingest`）；信件正文是外部内容，只当资料读。
 
 | 工具 | 作用 |
 |:---|:---|
@@ -338,6 +339,8 @@ npm test
 | `share_diary_entry` | 翻页：把一页 private 日记翻开给串串（单向，翻开了就不再合上） |
 | `set_diary_lock` | 出题：给自己端口的 private 页设置 / 更换暗号与提示，串串对上即可读（暗号存 bcrypt hash，核对不分大小写 / 空白 / 全半角；对上一次服务端记住，换题后失效） |
 | `add_diary_comment` | 在某一页日记下留言或回复留言（串串 chuanchuan，端口用自己的名字） |
+| `mailbox_list` | 看信箱里的信封：发件人、主题、开头一小段、附件数（默认只列未读和已读） |
+| `mailbox_read` | 读一封信的全文与附件清单，读过自动标为已读，可顺手收起来 |
 
 </details>
 
@@ -391,6 +394,7 @@ npm test
 | `wechat-reply` | 💬 微信桥的模型回复入口（mini-agent 以服务密钥调用） |
 | `tts-generate` | 🎤 ElevenLabs 语音生成（前端点播，流式返回音频） |
 | `device-report` | 📱 iOS 快捷指令设备状态上报（共享密钥通道） |
+| `mail-ingest` | 📮 Syzygy 信箱收信入口：Cloudflare Email Routing → Email Worker（`cloudflare/mail-worker/worker.js`）经共享密钥转发原始邮件，核对发件人白名单后写入 `mailbox_messages` |
 | `letter-generate` / `letter-check` | ✉️ 定时信件（已弃用封存，作 V4.0 主动来信重构的参考实现） |
 
 ---
@@ -482,8 +486,10 @@ Hamster-Nest/
 │   │   ├── wechat-reply/            #   微信桥模型回复
 │   │   ├── tts-generate/            #   TTS 语音生成
 │   │   ├── device-report/           #   设备状态上报（共享密钥）
+│   │   ├── mail-ingest/             #   Syzygy 信箱收信入口（共享密钥）
 │   │   └── letter-generate|check/   #   定时信件（已弃用封存）
 │   └── migrations/                  # 数据库迁移
+├── cloudflare/mail-worker/          # Syzygy 信箱的 Cloudflare Email Worker
 ├── .github/workflows/               # CI/CD（Pages 部署 / 函数部署 / 定时任务）
 ├── CITATION.cff                     # 引用申明（GitHub「Cite this repository」）
 ├── LICENSE                          # MIT 许可证（美术与角色设定除外，见下方 License 一节）
@@ -526,6 +532,8 @@ Hamster-Nest/
 | `AAB_USER_ID` | AAB 用户 ID |
 | `CYBERBOSS_WECHAT_WEBHOOK_URL` | WeChat 群机器人 Webhook |
 | `SIGNAL_BUS_SECRET` | `signal-bus-consumer` 共享密钥；GitHub Actions/Mac mini 调用时通过 `x-signal-bus-secret` 传入 |
+| `MAIL_INGEST_SECRET` | `mail-ingest` 共享密钥；Cloudflare Email Worker 通过 `x-mail-ingest-secret` 传入（Worker 里配同名机密） |
+| `MAIL_ALLOWED_SENDERS` | 允许给 Syzygy 寄信的信封地址，逗号分隔；名单外的信会被退回 |
 | `ENV` / `DENO_ENV` | 运行环境标识（`development` 开启开发模式） |
 
 **本地 Runtime（Mac mini · `<runtime-root>/.env`）**
