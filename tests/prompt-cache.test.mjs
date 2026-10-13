@@ -6,7 +6,7 @@ const {
   applyAnthropicPromptCaching,
   findHistoryBreakpointIndex,
 } = await import('../supabase/functions/openrouter-chat/prompt-cache.ts')
-const { buildCurrentShanghaiTimeNote } = await import(
+const { buildCurrentShanghaiTimeNote, buildConversationModelMessages } = await import(
   '../supabase/functions/conversation-dispatch/model-context.ts'
 )
 const { OpenAiSseAccumulator } = await import(
@@ -86,14 +86,13 @@ test('current time rides at the end as a user-role note, not in the system promp
     buildCurrentShanghaiTimeNote(new Date('2026-08-04T00:01:02.000Z')),
     '（运行时附注，不是串串的发言）当前上海时间：2026-08-04 08:01:02（Asia/Shanghai）',
   )
-  const source = await readFile(
-    new URL('../supabase/functions/conversation-dispatch/index.ts', import.meta.url),
-    'utf8',
-  )
-  assert.match(
-    source,
-    /\.\.\.canonicalMessages,\s*\{\s*role: 'user' as const,\s*content: buildCurrentShanghaiTimeNote\(\),/u,
-  )
+  const messages = buildConversationModelMessages('固定身份', [
+    { role: 'user', content: '原消息', created_at: '2026-08-04T00:00:00Z' },
+  ], true, new Date('2026-08-04T00:01:02Z'))
+  assert.equal(messages[0].content, '固定身份')
+  assert.equal(messages.at(-1).role, 'user')
+  assert.match(messages.at(-1).content, /当前上海时间：/u)
+  assert.equal(buildConversationModelMessages('固定身份', [], false).length, 1)
 })
 
 test('lounge system identity is stable; per-reply values move to the turn note', () => {

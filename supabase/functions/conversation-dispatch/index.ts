@@ -27,8 +27,7 @@ import {
   startOfShanghaiDayIso,
 } from './context.ts'
 import {
-  buildCurrentShanghaiTimeNote,
-  withCanonicalMessageTimestamp,
+  buildConversationModelMessages,
 } from './model-context.ts'
 import { recordLlmUsage } from '../_shared/llm_usage.ts'
 
@@ -416,6 +415,7 @@ const loadConversationRequest = async (
   dispatch: ConversationDispatchPrepareResult,
   sessionId: string,
   userId: string,
+  includeTimestamps: boolean,
 ) => {
   const [sessionResult, settingsResult] = await Promise.all([
     client
@@ -465,7 +465,7 @@ const loadConversationRequest = async (
   const epochStart = contextRecipe.epoch === 'asia_shanghai_day'
     ? startOfShanghaiDayIso(dispatch.user_message.created_at)
     : null
-  const canonicalMessages = (await loadConversationHistory({
+  const canonicalMessages = await loadConversationHistory({
     client,
     userId,
     sessionId,
@@ -473,20 +473,8 @@ const loadConversationRequest = async (
     tokenBudget,
     requiredMessageId: dispatch.user_message.id,
     excludedMessageId: dispatch.reply.id,
-  }))
-    .map((message) => ({
-      role: message.role,
-      content: withCanonicalMessageTimestamp(message.content, message.created_at),
-    }))
-
-  const messages = [
-    ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-    ...canonicalMessages,
-    {
-      role: 'user' as const,
-      content: buildCurrentShanghaiTimeNote(),
-    },
-  ]
+  })
+  const messages = buildConversationModelMessages(systemPrompt, canonicalMessages, includeTimestamps)
 
   return {
     messages,
@@ -793,6 +781,7 @@ Deno.serve(async (request) => {
       dispatch,
       payload.session_id,
       userId,
+      payload.include_timestamps,
     )
   } catch (loadError) {
     console.error('[conversation-dispatch] canonical context load failed', loadError)

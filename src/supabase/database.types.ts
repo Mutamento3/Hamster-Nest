@@ -4040,6 +4040,43 @@ export type Database = {
       }
     }
     Functions: {
+      archive_apply_change: { Args: { p_operation: Json }; Returns: Json }
+      archive_category_index: {
+        Args: { p_after?: string; p_scope: string }
+        Returns: {
+          created_at: string
+          entry_count: number
+          id: string
+          name: string
+          parent_id: string
+          scope: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }[]
+      }
+      archive_search_entries: {
+        Args: {
+          p_before_id?: string
+          p_before_time?: string
+          p_category?: string
+          p_scope: string
+          p_search?: string
+        }
+        Returns: {
+          aliases: string[]
+          category_id: string
+          created_at: string
+          excerpt: string
+          id: string
+          importance: string
+          keywords: string[]
+          source: string
+          title: string
+          updated_at: string
+          user_id: string
+        }[]
+      }
       claim_pending_wechat_message: {
         Args: { p_worker_id: string }
         Returns: {
