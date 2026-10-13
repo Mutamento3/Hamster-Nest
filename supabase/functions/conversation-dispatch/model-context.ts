@@ -33,3 +33,20 @@ export const buildCurrentShanghaiTimeNote = (now = new Date()) =>
 
 export const withCanonicalMessageTimestamp =(content: string, createdAt: string) =>
   `[${formatShanghaiTimestamp(createdAt)}] ${content}`
+
+/** Both automatic time sources share one switch; stored chat content is never rewritten. */
+export const buildConversationModelMessages = (
+  systemPrompt: string,
+  history: readonly { role: 'user' | 'assistant'; content: string; created_at: string }[],
+  includeTimestamps = true,
+  now = new Date(),
+): { role: 'system' | 'user' | 'assistant'; content: string }[] => [
+  ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+  ...history.map((message) => ({
+    role: message.role,
+    content: includeTimestamps
+      ? withCanonicalMessageTimestamp(message.content, message.created_at)
+      : message.content,
+  })),
+  ...(includeTimestamps ? [{ role: 'user' as const, content: buildCurrentShanghaiTimeNote(now) }] : []),
+]

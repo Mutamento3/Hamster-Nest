@@ -217,3 +217,10 @@ test('pending cancel boundary validates task ids and keeps privileged work behin
   assert.match(source, /\.rpc\('conversation_dispatch_cancel_pending'/u)
   assert.ok(source.indexOf('getOwnerUserId()') < source.indexOf('getSupabaseAdminKey()'))
 })
+
+test('timestamp option preserves explicit false, defaults old clients to true, and rejects coercion', () => {
+  const input = { session_id: '00000000-0000-4000-8000-000000000001', client_id: '00000000-0000-4000-8000-000000000002', content: '测试' }
+  assert.equal(normalizeConversationDispatchRequest(input).include_timestamps, true)
+  for (const value of [true, false]) assert.equal(normalizeConversationDispatchRequest({ ...input, include_timestamps: value }).include_timestamps, value)
+  for (const value of ['false', null, 0, {}]) assert.throws(() => normalizeConversationDispatchRequest({ ...input, include_timestamps: value }), /include_timestamps/u)
+})

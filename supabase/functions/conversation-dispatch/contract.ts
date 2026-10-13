@@ -14,6 +14,7 @@ export type ConversationDispatchRequest = {
   client_created_at?: string
   target_sender_keys?: string[]
   retry_failed: boolean
+  include_timestamps: boolean
 }
 
 export type ConversationDeliveryState = 'generating' | 'completed' | 'failed'
@@ -110,6 +111,10 @@ export const normalizeConversationDispatchRequest = (
     )
   }
 
+  if (input.include_timestamps !== undefined && typeof input.include_timestamps !== 'boolean') {
+    throw new ConversationDispatchRequestError('include_timestamps 必须是 boolean')
+  }
+
   const clientCreatedAt = normalizeClientCreatedAt(input.client_created_at)
   const targetSenderKeys = normalizeTargets(input.target_sender_keys)
 
@@ -120,6 +125,7 @@ export const normalizeConversationDispatchRequest = (
     ...(clientCreatedAt ? { client_created_at: clientCreatedAt } : {}),
     ...(targetSenderKeys ? { target_sender_keys: targetSenderKeys } : {}),
     retry_failed: input.retry_failed === true,
+    include_timestamps: input.include_timestamps !== false,
   }
 }
 

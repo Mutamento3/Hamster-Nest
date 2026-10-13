@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 const {
+  buildConversationModelMessages,
   buildCurrentShanghaiTimePrompt,
   formatShanghaiTimestamp,
   withCanonicalMessageTimestamp,
@@ -43,8 +44,8 @@ test('App companion replies resolve the same model channel used by proactive mes
   assert.match(source, /from\('channel_config'\)/u)
   assert.match(source, /profileKey === 'app_companion'/u)
   assert.match(source, /generation\.activeModel/u)
-  assert.match(source, /withCanonicalMessageTimestamp/u)
-  assert.match(source, /buildCurrentShanghaiTimeNote/u)
+  assert.match(source, /buildConversationModelMessages/u)
+  assert.match(source, /payload\.include_timestamps/u)
 })
 
 test('completed App replies publish one idempotent push fact routed back to the conversation', async () => {
@@ -80,4 +81,25 @@ test('conversation push preview is bounded, readable, and fetched owner-scoped',
   assert.match(source, /\.eq\('user_id', event\.user_id\)/u)
   assert.match(source, /body: preview/u)
   assert.match(source, /title: resolvePushTitle\(event\.title, event\.entity_type\)/u)
+})
+
+const timeHistory = [
+  { role: 'user', content: '明天8点见', created_at: '2026-10-13T11:00:00Z' },
+  { role: 'assistant', content: '记好了', created_at: '2026-10-13T11:01:00Z' },
+]
+test('disabling automatic timestamps removes both time sources without changing user text or stored rows', () => {
+  const before = structuredClone(timeHistory)
+  const messages = buildConversationModelMessages('身份', timeHistory, false)
+  assert.deepEqual(messages, [{ role: 'system', content: '身份' },
+    { role: 'user', content: '明天8点见' }, { role: 'assistant', content: '记好了' }])
+  assert.deepEqual(timeHistory, before)
+})
+test('enabling timestamps retains stable history and places changing current time after it', () => {
+  const one = buildConversationModelMessages('身份', timeHistory, true, new Date('2026-10-13T11:02:00Z'))
+  const two = buildConversationModelMessages('身份', timeHistory, true, new Date('2026-10-13T11:03:00Z'))
+  assert.deepEqual(one.slice(0, -1), two.slice(0, -1))
+  assert.equal(one[1].content, '[2026-10-13 19:00:00] 明天8点见')
+  assert.equal(one.at(-1).role, 'user')
+  assert.match(one.at(-1).content, /当前上海时间：2026-10-13 19:02:00/u)
+  assert.deepEqual(buildConversationModelMessages('', [], false), [])
 })
