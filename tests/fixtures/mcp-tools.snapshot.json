@@ -71,7 +71,8 @@
     "search_timeline",
     "update_event_entry",
     "update_event_thread",
-    "update_memo"
+    "update_memo",
+    "update_timeline"
   ],
   "hamster-print-mcp": [
     "get_print_status",

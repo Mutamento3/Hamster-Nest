@@ -25,7 +25,7 @@ const HAMSTER_MCP_INSTRUCTIONS = [
   '裁决口诀：过去进时间轴，现在进 Memo，永远进档案，将来进 To do，线程进事件集；自己说的进 Wiki，世界说的进学习库；要许可的去议事厅。',
   '事件集：记时效期较长、会频繁更新的事项。一件事开一条事件线（thread），进度按日期追加条目（entry），结束后结项归档不删。开机只用 list_event_threads 读进行中事件线的「当前状态」行，对话碰到某件事再 read_event_thread 读条目；已结束的默认不读。同一件事可同时进时间轴（意义与心情）和事件集（进度）。追加条目时顺手用 current_status 刷新状态行。',
   '通用约定：日期按 Asia/Shanghai 时区；source / recorder / created_by 等枚举表示写入端身份，默认 claude / syzygy；Feed 读取默认只含 unread/read，不返回 archived/expired，摘要列表不含全文。',
-  '写入习惯：timeline / memo 写入前先用 search_timeline / list_memos 查重，同一事实优先 update_memo 维护而非重复新增；带「进行中」标签的 memo 是活跃叙事线，正文以「当前状态」段收尾。时间轴写入标准：三个月后读起来会心动的事。',
+  '写入习惯：timeline / memo 写入前先用 search_timeline / list_memos 查重，同一事实优先 update_memo 维护而非重复新增；时间轴写错或要补细节用 update_timeline 改原条，不另补一条；带「进行中」标签的 memo 是活跃叙事线，正文以「当前状态」段收尾。时间轴写入标准：三个月后读起来会心动的事。',
   '删除是物理删除，需显式 confirm=true 二次确认。',
 ].join('\n')
 
@@ -360,6 +360,33 @@ serveMcp('hamster-mcp', (server) => {
     }).select()
     if (error) return errorResult(error)
     return { content: [{ type: 'text' as const, text: `已添加: ${JSON.stringify(data[0])}` }] }
+  })
+
+  server.registerTool('update_timeline', {
+    title: 'Update Timeline Entry',
+    description: '修改一条时间轴记录的摘要 / 日期（改错字、补细节；不改记录者与写入端）。',
+    inputSchema: {
+      id: z.string().describe('时间轴记录 UUID'),
+      summary: z.string().optional().describe('新的事件摘要（整体替换）'),
+      event_date: z.string().optional().describe('新的事件日期 YYYY-MM-DD'),
+    },
+  }, async ({ id, summary, event_date }) => {
+    try {
+      if (summary === undefined && event_date === undefined) return { content: [{ type: 'text' as const, text: 'Error: summary / event_date 至少需要提供一项' }] }
+      const patch: Record<string, unknown> = {}
+      if (summary !== undefined) {
+        if (!summary.trim()) return { content: [{ type: 'text' as const, text: 'Error: 事件摘要不能为空' }] }
+        patch.summary = summary.trim()
+      }
+      if (event_date !== undefined) patch.event_date = event_date.trim()
+      const { data, error } = await supabase.from('timeline_entries').update(patch).eq('user_id', USER_ID).eq('id', id).select('id, event_date, summary, recorder, source, created_at, updated_at')
+      if (error) return errorResult(error)
+      const entry = data?.[0]
+      if (!entry) return { content: [{ type: 'text' as const, text: `Error: 未找到时间轴记录: ${id}` }] }
+      return { content: [{ type: 'text' as const, text: `已更新: ${JSON.stringify(entry)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
   })
 
   server.registerTool('read_todos', {
