@@ -1,6 +1,7 @@
+import { readDeviceSnapshot, type Client } from '../_shared/device-sync.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { verifyAuth } from '../_shared/auth.ts'
-import { getBeijingTimeString, formatBeijingClock } from '../_shared/time.ts'
+import { getBeijingTimeString } from '../_shared/time.ts'
 import { consumeQuota, quotaExceededResponse } from '../_shared/quota.ts'
 import { getOwnerUserId } from '../_shared/owner.ts'
 import { getSupabaseAdminKey } from '../_shared/supabase_secret.ts'
@@ -98,30 +99,14 @@ Deno.serve(async (req: Request) => {
     .map((m: { content: string }) => `- ${m.content}`)
     .join('\n')
 
-  // 读取设备状态（天气、电量、位置等）
-  const { data: deviceStatus } = await supabase
-    .from('device_status')
-    .select('weather, battery_level, steps, latitude, longitude, device_name, is_charging, created_at')
-    .eq('user_id', USER_ID)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
-
+  // Each field carries its own observation/receipt time; sparse App uploads cannot erase older facts.
   let deviceContext = ''
-  if (deviceStatus) {
-    const parts: string[] = []
-    if (deviceStatus.weather) parts.push(`天气：${deviceStatus.weather}`)
-    if (deviceStatus.battery_level != null) {
-      const chargingStr = deviceStatus.is_charging ? '（充电中）' : ''
-      parts.push(`电量：${deviceStatus.battery_level}%${chargingStr}`)
-    }
-    if (deviceStatus.steps != null && deviceStatus.steps > 0) parts.push(`今日步数：${deviceStatus.steps}`)
-    if (deviceStatus.created_at) {
-      parts.push(`上报时间：${formatBeijingClock(new Date(deviceStatus.created_at))}`)
-    }
-    if (parts.length > 0) {
-      deviceContext = `串串的设备状态：${parts.join('，')}`
-    }
+  try {
+    const snapshot = await readDeviceSnapshot(supabase as unknown as Client, USER_ID)
+    const { battery, charging, weather, steps } = snapshot.fields
+    deviceContext = `串串最近已同步的设备记录（每项时间独立，旧记录不代表现在；快捷指令时间为接收时间，步数不一定属于今天）：${JSON.stringify({ battery, charging, weather, steps })}`
+  } catch {
+    // A transient device read failure must not prevent the chat reply.
   }
 
   const currentTime = getBeijingTimeString()
