@@ -82,3 +82,6 @@ entrypoint = "./functions/conversation-task-cancel/index.ts"
 verify_jwt = true
 import_map = "./functions/runtime-control/deno.json"
 entrypoint = "./functions/runtime-control/index.ts"
+
+[functions.device-sync]
+verify_jwt = false

@@ -1,3 +1,4 @@
+import { readDeviceSnapshot, type Client } from '../_shared/device-sync.ts'
 import { z } from 'npm:zod@^4.1.13'
 import { clampLimit, errorResult, jsonResult, serveMcp, supabase, USER_ID } from '../_shared/mcp_common.ts'
 
@@ -184,6 +185,15 @@ const fetchEventThread = async (threadId: string): Promise<EventThreadRow | null
 const eventThreadNotFound = (threadId: string) => ({ content: [{ type: 'text' as const, text: `Error: 未找到事件线: ${threadId}（用 list_event_threads 核对 id）` }] })
 
 serveMcp('hamster-mcp', (server) => {
+  server.registerTool('read_device_snapshot', {
+    description: '读取串串已同步的位置、电量、充电、天气、步数与最近到家/离家记录，各项独立带时间和来源。旧值不是实时位置；快捷指令时间仅代表收到时间；步数未接HealthKit，按现有来源解释。不触发手机采集或唤醒CLI。',
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+  }, async () => {
+    try { return jsonResult(await readDeviceSnapshot(supabase as unknown as Client, USER_ID)) }
+    catch (error) { return errorResult(error) }
+  })
+
   server.registerTool('cli_set_self_alarm', {
     title: 'Set CLI Self Alarm',
     description: 'CLI 给自己预约当天一次自由活动闹钟。角色由本轮运行任务派生；09:00–21:00 上海时间，避开固定任务、随机活动和另一 CLI。冲突返回附近可用时间；不支持改期或取消。',

@@ -65,6 +65,7 @@
     "list_event_threads",
     "list_memo_tags",
     "list_memos",
+    "read_device_snapshot",
     "read_event_thread",
     "read_todos",
     "recent_timeline",
