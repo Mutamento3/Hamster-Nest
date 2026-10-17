@@ -85,3 +85,6 @@ entrypoint = "./functions/runtime-control/index.ts"
 
 [functions.device-sync]
 verify_jwt = false
+
+[functions.health-sync]
+verify_jwt = false

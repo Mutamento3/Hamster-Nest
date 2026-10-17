@@ -185,8 +185,17 @@ const fetchEventThread = async (threadId: string): Promise<EventThreadRow | null
 const eventThreadNotFound = (threadId: string) => ({ content: [{ type: 'text' as const, text: `Error: 未找到事件线: ${threadId}（用 list_event_threads 核对 id）` }] })
 
 serveMcp('hamster-mcp', (server) => {
+  server.registerTool('read_health_steps', {
+    description: '读取用户单独授权给AI的HealthKit步数，最近一次采集的七个上海自然日，与App健康页已同步区间、值和版本一致。每次实时核验云端授权；未授权不返回数据。null是未读到，不是零；旧记录不是当前值，不能据缺失作健康判断。独立于快捷指令步数，不能累加两来源，不触发手机采集。',
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+  }, async () => {
+    const {data,error} = await supabase.rpc('health_steps_gateway',{p_owner:USER_ID,p_action:'ai_read'})
+    return error ? errorResult(error) : jsonResult(data)
+  })
+
   server.registerTool('read_device_snapshot', {
-    description: '读取串串已同步的位置、电量、充电、天气、步数与最近到家/离家记录，各项独立带时间和来源，并返回最近50条常用地点状态记录（不是所有地点的当前状态）。phase=initial/observation不能说成到达或离开，只有transition是边界变化；地点配置版本不同不可串联，停用后历史仍保留。旧值不是实时位置；快捷指令时间仅代表收到时间；步数未接HealthKit，按现有来源解释。不触发手机采集或唤醒CLI。',
+    description: '读取串串已同步的位置、电量、充电、天气、步数与最近到家/离家记录，各项独立带时间和来源，并返回最近50条常用地点状态记录（不是所有地点的当前状态）。phase=initial/observation不能说成到达或离开，只有transition是边界变化；地点配置版本不同不可串联，停用后历史仍保留。旧值不是实时位置；快捷指令时间仅代表收到时间；此处步数为旧快捷指令口径；HealthKit须使用另行授权的read_health_steps，不可累加。不触发手机采集或唤醒CLI。',
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   }, async () => {

@@ -1742,6 +1742,74 @@ export type Database = {
           },
         ]
       }
+      health_daily_steps: {
+        Row: {
+          availability: string
+          day: string
+          end_at: string
+          start_at: string
+          steps: number | null
+          user_id: string
+        }
+        Insert: {
+          availability: string
+          day: string
+          end_at: string
+          start_at: string
+          steps?: number | null
+          user_id: string
+        }
+        Update: {
+          availability?: string
+          day?: string
+          end_at?: string
+          start_at?: string
+          steps?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "health_daily_steps_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "health_steps_access"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      health_steps_access: {
+        Row: {
+          collected_at: string | null
+          consent_version: number
+          data_version: number
+          mode: string
+          payload_digest: string | null
+          received_at: string | null
+          sample_id: string | null
+          user_id: string
+        }
+        Insert: {
+          collected_at?: string | null
+          consent_version?: number
+          data_version?: number
+          mode?: string
+          payload_digest?: string | null
+          received_at?: string | null
+          sample_id?: string | null
+          user_id: string
+        }
+        Update: {
+          collected_at?: string | null
+          consent_version?: number
+          data_version?: number
+          mode?: string
+          payload_digest?: string | null
+          received_at?: string | null
+          sample_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ideas: {
         Row: {
           captured_by: string
@@ -4379,6 +4447,16 @@ export type Database = {
         }[]
       }
       get_push_dispatch_secret: { Args: never; Returns: string }
+      health_steps_gateway: {
+        Args: {
+          p_action: string
+          p_mode?: string
+          p_owner: string
+          p_revision?: number
+          p_snapshot?: Json
+        }
+        Returns: Json
+      }
       lounge_claim_api: {
         Args: { p_owner: string }
         Returns: {

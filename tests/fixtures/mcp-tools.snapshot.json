@@ -67,6 +67,7 @@
     "list_memos",
     "read_device_snapshot",
     "read_event_thread",
+    "read_health_steps",
     "read_todos",
     "recent_timeline",
     "search_timeline",
