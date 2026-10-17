@@ -1,5 +1,10 @@
 // Versioned device facts. This module is shared by the App endpoint and MCP reads.
-export type SyncKind = 'battery' | 'location' | 'weather' | 'home_event'
+export type SyncKind =
+  | 'battery'
+  | 'location'
+  | 'weather'
+  | 'home_event'
+  | 'place_event'
 export type SyncSample = {
   version: 1
   id: string
@@ -75,6 +80,20 @@ export function parseSample(
     valid = keys(v, ['regionId', 'direction']) && v.regionId === 'home' &&
       ['enter', 'exit'].includes(v.direction as string)
   }
+  if (raw.kind === 'place_event') {
+    valid = keys(v, [
+      'placeId',
+      'placeName',
+      'configVersion',
+      'direction',
+      'phase',
+    ]) &&
+      (v.placeId === 'home' || uuid(v.placeId)) && text(v.placeName, 30) &&
+      String(v.placeName).trim().length > 0 &&
+      Number.isSafeInteger(v.configVersion) && Number(v.configVersion) > 0 &&
+      ['enter', 'exit'].includes(String(v.direction)) &&
+      ['initial', 'transition', 'observation'].includes(String(v.phase))
+  }
   if (raw.kind === 'weather') {
     valid = keys(v, [
       'status',
@@ -133,7 +152,9 @@ export function sampleRow(s: SyncSample, receivedAt: string) {
       syncVersion: 1,
       sample: s,
       receivedAt,
-      ...(s.kind === 'home_event'
+      ...((s.kind === 'home_event' ||
+          (s.kind === 'place_event' && v.placeId === 'home' &&
+            v.phase === 'transition'))
         ? {
           trigger: v.direction === 'enter' ? 'geofence_enter' : 'geofence_exit',
         }
@@ -213,21 +234,36 @@ export async function readDeviceSnapshot(
     if (r.error) throw new Error('device read unavailable')
     return r.data?.[0] ?? null
   }
-  const [battery, charging, location, weather, steps, oldSteps, event] =
-    await Promise.all([
-      latest(base().not('battery_level', 'is', null)),
-      latest(base().not('is_charging', 'is', null)),
-      latest(base().not('latitude', 'is', null).not('longitude', 'is', null)),
-      latest(base().not('weather', 'is', null)),
-      latest(base().not('steps', 'is', null)),
-      latest(base().not('step_count', 'is', null)),
-      latest(
-        base().eq('source_app', 'expo_app').in('raw_data->>trigger', [
-          'geofence_enter',
-          'geofence_exit',
-        ]),
-      ),
-    ])
+  const [
+    battery,
+    charging,
+    location,
+    weather,
+    steps,
+    oldSteps,
+    event,
+    placeHistory,
+  ] = await Promise.all([
+    latest(base().not('battery_level', 'is', null)),
+    latest(base().not('is_charging', 'is', null)),
+    latest(base().not('latitude', 'is', null).not('longitude', 'is', null)),
+    latest(base().not('weather', 'is', null)),
+    latest(base().not('steps', 'is', null)),
+    latest(base().not('step_count', 'is', null)),
+    latest(
+      base().eq('source_app', 'expo_app').in('raw_data->>trigger', [
+        'geofence_enter',
+        'geofence_exit',
+      ]),
+    ),
+    base().eq('source_app', 'expo_app').eq(
+      'raw_data->sample->>kind',
+      'place_event',
+    ).order('created_at', { ascending: false }).order('id', {
+      ascending: false,
+    }).limit(50),
+  ])
+  if (placeHistory.error) throw new Error('place history unavailable')
   const field = (row: Record<string, unknown> | null, value: unknown) => {
     if (!row) return null
     const raw = object(row.raw_data) ? row.raw_data : {}
@@ -258,6 +294,21 @@ export async function readDeviceSnapshot(
     version: 1,
     owner,
     fetchedAt: new Date(now).toISOString(),
+    // Bounded event history, deliberately not a claim of current presence at every place.
+    placeEvents: (placeHistory.data ?? []).flatMap((row) => {
+      try {
+        const sample = parseSample(
+          object(row.raw_data) ? row.raw_data.sample : null,
+          owner,
+          now,
+        )
+        return sample.kind === 'place_event' && sample.id === row.id
+          ? [field(row, sample.value)]
+          : []
+      } catch {
+        return []
+      }
+    }),
     fields: {
       battery: field(battery, battery?.battery_level),
       charging: field(charging, charging?.is_charging),

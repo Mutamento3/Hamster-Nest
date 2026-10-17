@@ -186,7 +186,7 @@ const eventThreadNotFound = (threadId: string) => ({ content: [{ type: 'text' as
 
 serveMcp('hamster-mcp', (server) => {
   server.registerTool('read_device_snapshot', {
-    description: '读取串串已同步的位置、电量、充电、天气、步数与最近到家/离家记录，各项独立带时间和来源。旧值不是实时位置；快捷指令时间仅代表收到时间；步数未接HealthKit，按现有来源解释。不触发手机采集或唤醒CLI。',
+    description: '读取串串已同步的位置、电量、充电、天气、步数与最近到家/离家记录，各项独立带时间和来源，并返回最近50条常用地点状态记录（不是所有地点的当前状态）。phase=initial/observation不能说成到达或离开，只有transition是边界变化；地点配置版本不同不可串联，停用后历史仍保留。旧值不是实时位置；快捷指令时间仅代表收到时间；步数未接HealthKit，按现有来源解释。不触发手机采集或唤醒CLI。',
     inputSchema: {},
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   }, async () => {
