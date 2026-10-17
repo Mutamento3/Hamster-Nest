@@ -10,7 +10,7 @@
 
 [![Version](https://img.shields.io/badge/Version-v5.3.0-pink?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-MIT-a3e635?style=flat-square)](./LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-90-2dd4bf?style=flat-square)](#-mcp-工具箱全部-90-个)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-91-2dd4bf?style=flat-square)](#-mcp-工具箱全部-91-个)
 [![Edge Functions](https://img.shields.io/badge/Edge_Functions-19-8b5cf6?style=flat-square)](#-后端-edge-functions)
 [![PRs](https://img.shields.io/badge/PRs-1000+-ff69b4?style=flat-square)](#)
 [![PWA](https://img.shields.io/badge/PWA-可装进手机-f59e0b?style=flat-square)](#)
@@ -108,7 +108,7 @@
 
 | MCP 服务器 | 职责 | 工具数 |
 |:---|:---|:---:|
-| `hamster-mcp` | 时间轴 · 待办 · Syzygy Feed · 月度概览 · 备忘录 · 事件集 · 设备同步 | 25 |
+| `hamster-mcp` | 时间轴 · 待办 · Syzygy Feed · 月度概览 · 备忘录 · 事件集 · 设备同步 · 健康步数 | 26 |
 | `hamster-knowledge-mcp` | 知识库 · 记忆档案 · Wiki · 囤粮处 | 17 |
 | `hamster-reading-mcp` | 阅读记录 · 书摘 · 章节 · 旁批共鸣 · 书籍问答 · 导读/总结 | 18 |
 | `hamster-lounge-mcp` | 仓鼠客厅 · 议事厅 · Syzygy 日记本 · 信箱 | 19 |
@@ -201,7 +201,7 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 ---
 
-### 🧰 MCP 工具箱（全部 90 个）
+### 🧰 MCP 工具箱（全部 91 个）
 
 > 每个 MCP 服务器都是一个独立的 Supabase Edge Function，走 JSON-RPC / MCP Streamable HTTP。
 > 鉴权优先使用 `x-hamster-mcp-key` 请求头（timing-safe 比对）或 Supabase Auth Header；`?key=` 仅为旧客户端迁移期兼容，避免新凭证进入 URL / Access Log。
@@ -230,10 +230,11 @@ npm test
 3. 能不能进已有的工厂 config，而不是再手写一个 `registerTool`？优先复用已有模式；本规则不要求为此重构现有工具。
 
 <details open>
-<summary><b>🐹 hamster-mcp</b> — 时间轴 · 待办 · Feed · 备忘录 · 事件集（25）</summary>
+<summary><b>🐹 hamster-mcp</b> — 时间轴 · 待办 · Feed · 备忘录 · 事件集 · 健康步数（26）</summary>
 
 | 工具 | 作用 |
 |:---|:---|
+| `read_health_steps` | 实时核验独立AI授权，读取与App同版本的七天HealthKit汇总；不触发采集 |
 | `read_device_snapshot` | 读取已同步设备状态，各类独立时间与来源；不触发手机采集 |
 | `cli_set_self_alarm` | 根据本轮 CLI 任务身份给自己预约当天一次闹钟，冲突返回可用时刻 |
 | `get_today_syzygy_feed` | 读取今日 Syzygy Feed 摘要（按可见时间过滤，可筛优先级 / 已读状态） |
