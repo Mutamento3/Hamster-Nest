@@ -1,4 +1,4 @@
-# HealthKit 七天汇总与独立授权（候选）
+# HealthKit 七天汇总与独立授权（生产迁移已应用）
 
 新增 `health_steps_access` 与 `health_daily_steps`：typed日区间、步数/不可读状态；原始健康样本不上传。固定上海时间七天窗口，整个捕获批次重算覆盖，允许步数减少/删除变为null。每用户只保存最近一次七天捕获；读取/上传时清除超过八天的旧捕获，不是定时清理承诺。
 
@@ -12,7 +12,7 @@
 
 ## 部署顺序与验证
 
-先部署 `20261017120246_health_steps_consent.sql`，再合并/部署health-sync与hamster-mcp（main既有自动工作流只部署函数，不应用迁移）。本次仅候选，尚未应用到生产。
+2026-10-17 已通过迁移接口应用 `20261017123650_health_steps_consent.sql`，远端SQL摘要与原候选20261017120246完全一致；文件名对齐实际迁移记录。两表RLS开启、anon/authenticated无表权限，gateway为service-only SECURITY INVOKER。随后合并/部署health-sync与hamster-mcp（main既有自动工作流只部署函数，不应用迁移）。最终部署版本与真实手机验收分别记录在正式交付回执。
 
 迁移无既有表破坏性改动；回退时可停用新端点/移除新工具注册并保留健康授权表，不能回滚授权版本导致旧请求复活。真实数据清理由用户健康页显式撤销完成。
 

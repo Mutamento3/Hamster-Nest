@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { PGlite } from '@electric-sql/pglite'
 import { healthSyncHandler } from '../supabase/functions/health-sync/handler.ts'
 const owner='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
-const migration=readFileSync(new URL('../supabase/migrations/20261017120246_health_steps_consent.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../supabase/migrations/20261017123650_health_steps_consent.sql',import.meta.url),'utf8');
 const snapshot=(time=Date.now()-10000,steps=100)=>{
  const day=new Date(time+8*3600000).toISOString().slice(0,10),start=Date.parse(day+'T00:00:00+08:00');
  return {version:1,owner,source:'healthkit',timezone:'Asia/Shanghai',sampleId:crypto.randomUUID(),collectedAt:new Date(time).toISOString(),days:Array.from({length:7},(_,i)=>{const at=start-i*86400000;return {date:new Date(at+8*3600000).toISOString().slice(0,10),startAt:new Date(at).toISOString(),endAt:new Date(at+86400000).toISOString(),steps,availability:steps===null?'unavailable':'available'}})};
