@@ -13,7 +13,7 @@ async function setup(){
   const api={select(){return api},eq(k,v){filters.push([k,'=',v]);return api},not(k,_op,v){filters.push([k,'is not',v]);return api},in(k,v){filters.push([k,'in',v]);return api},order(k,{ascending}){orders.push(`${k} ${ascending?'asc':'desc'}`);return api},limit(n){count=n;return api},insert(v){row=v;return api},then(resolve,reject){
    const run=async()=>{try{
     if(row){const cols=Object.keys(row);await db.query(`insert into device_status(${cols.join(',')}) values(${cols.map((_,i)=>'$'+(i+1)).join(',')})`,Object.values(row));return {data:null,error:null}}
-    const params=[];const conditions=filters.map(([column,op,v])=>{const k=column.replace('raw_data->>trigger',"raw_data->>'trigger'");if(op==='is not')return `${k} is not null`;if(op==='in'){const list=v.map(x=>{params.push(x);return '$'+params.length});return `${k} in (${list.join(',')})`;}params.push(v);return `${k}=$${params.length}`;});
+    const params=[];const conditions=filters.map(([column,op,v])=>{const k=column.replace('raw_data->>trigger',"raw_data->>'trigger'").replace('raw_data->sample->>kind',"raw_data->'sample'->>'kind'");if(op==='is not')return `${k} is not null`;if(op==='in'){const list=v.map(x=>{params.push(x);return '$'+params.length});return `${k} in (${list.join(',')})`;}params.push(v);return `${k}=$${params.length}`;});
     const result=await db.query(`select * from device_status where ${conditions.join(' and ') || 'true'} ${orders.length?'order by '+orders.join(','):''} limit ${count}`,params)
     // Match REST timestamp serialization.
     return {data:result.rows.map(r=>({...r,created_at:new Date(r.created_at).toISOString()})),error:null}
@@ -66,3 +66,27 @@ test('endpoint verifies identity before reads or writes and rejects missing, for
  assert.equal((await handler(request({action:'upload',owner,samples:[{...s,value:{level:70,charging:false}}]}))).status,409)
  }finally{await db.close()}
 })
+
+test('place initial observations never masquerade as home arrivals; history stays owner scoped and ordered',async()=>{
+ const {db,client}=await setup();try{
+ const value={placeId:'home',placeName:'家',configVersion:1,direction:'enter',phase:'initial'};
+ const initial=sample('place_event',-2000,value); await storeSamples(client,owner,[initial],now);
+ assert.equal(sampleRow(initial,new Date(now).toISOString()).raw_data.trigger,undefined);
+ let result=await readDeviceSnapshot(client,owner,now);assert.equal(result.fields.home_event,null);assert.equal(result.placeEvents[0].value.phase,'initial');
+ const transition=sample('place_event',-1000,{...value,direction:'exit',phase:'transition'});await storeSamples(client,owner,[transition],now);
+ result=await readDeviceSnapshot(client,owner,now);assert.equal(result.fields.home_event.value,'exit');assert.equal(result.placeEvents.length,2);
+ assert.equal(result.placeEvents[0].value.configVersion,1);assert.equal((await readDeviceSnapshot(client,other,now)).placeEvents.length,0);
+ await assert.rejects(storeSamples(client,owner,[sample('place_event',0,{...value,configVersion:0})],now),/invalid/);
+ await assert.rejects(storeSamples(client,owner,[sample('place_event',0,{...value,latitude:1})],now),/invalid/);
+ }finally{await db.close()}
+});
+
+test('place history is bounded to fifty and ignores malformed raw records',async()=>{
+ const {db,client}=await setup();try{
+ for(let i=0;i<55;i++)await storeSamples(client,owner,[sample('place_event',-i*1000,{placeId:'home',placeName:'家',configVersion:1,direction:'enter',phase:'observation'})],now);
+ const result=await readDeviceSnapshot(client,owner,now);assert.equal(result.placeEvents.length,50);assert.equal(result.fields.home_event,null);
+ assert.equal(result.placeEvents[0].observedAt,new Date(now).toISOString());
+ await db.query("insert into device_status(id,user_id,source_app,created_at,raw_data) values($1,$2,'expo_app',$3,$4)",[crypto.randomUUID(),owner,new Date(now+1000),{sample:{kind:'place_event'}}]);
+ const after=await readDeviceSnapshot(client,owner,now+1000);assert.equal(after.placeEvents.length,49);
+ }finally{await db.close()}
+});
