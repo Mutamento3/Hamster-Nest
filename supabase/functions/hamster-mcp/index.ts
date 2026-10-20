@@ -1,6 +1,20 @@
 import { readDeviceSnapshot, type Client } from '../_shared/device-sync.ts'
 import { z } from 'npm:zod@^4.1.13'
 import { clampLimit, errorResult, jsonResult, serveMcp, supabase, USER_ID } from '../_shared/mcp_common.ts'
+import {
+  MAX_TRAVEL_COMMENT_LENGTH,
+  MAX_TRAVEL_STOPS_PER_WRITE,
+  MAX_TRAVEL_SUMMARY_LENGTH,
+  TRAVEL_CHECKIN_KIND_LABELS,
+  TRAVEL_COMMENT_COLUMNS,
+  TRAVEL_STOP_KIND_LABELS,
+  TRAVEL_TRIP_COLUMNS,
+  buildAmapMarkerUrl,
+  compareTravel,
+  normalizeTravelStopInput,
+  normalizeTravelTripPatch,
+  type TravelTripStatus,
+} from './travel_contract.ts'
 
 const FEED_LIST_COLUMNS = 'id, type, title, summary, priority, status, source, created_by, visible_from, created_at, pinned, metadata'
 const FEED_DETAIL_COLUMNS = 'id, type, title, summary, content, content_format, priority, status, source, created_by, visible_from, expires_at, related_table, related_id, metadata, created_at, updated_at'
@@ -27,6 +41,7 @@ const HAMSTER_MCP_INSTRUCTIONS = [
   '事件集：记时效期较长、会频繁更新的事项。一件事开一条事件线（thread），进度按日期追加条目（entry），结束后结项归档不删。开机只用 list_event_threads 读进行中事件线的「当前状态」行，对话碰到某件事再 read_event_thread 读条目；已结束的默认不读。同一件事可同时进时间轴（意义与心情）和事件集（进度）。追加条目时顺手用 current_status 刷新状态行。',
   '通用约定：日期按 Asia/Shanghai 时区；source / recorder / created_by 等枚举表示写入端身份，默认 claude / syzygy；Feed 读取默认只含 unread/read，不返回 archived/expired，摘要列表不含全文。',
   '写入习惯：timeline / memo 写入前先用 search_timeline / list_memos 查重，同一事实优先 update_memo 维护而非重复新增；时间轴写错或要补细节用 update_timeline 改原条，不另补一条；带「进行中」标签的 memo 是活跃叙事线，正文以「当前状态」段收尾。时间轴写入标准：三个月后读起来会心动的事。',
+  '游记 travel_*：一次旅行（trip）= 攻略区（Syzygy 写的计划停留点，GCJ-02 坐标，可用高德 MCP 查 POI 与路线）+ 路线区（串串在 PWA 按下的打卡，离线补传，时间以按下时刻为准）。read_trip 会把每个打卡标成按计划 / 改道 / 新发现，把计划点标成到过 / 跳过 / 还没到；偏离不算扣分，新发现是惊喜。攻略要路痴友好：每个点写清为什么去、注意事项和导航提示（从上一站怎么过来、认哪个标志物）。旅行结束后可对照两区写复盘（update_trip.summary）。',
   '删除是物理删除，需显式 confirm=true 二次确认。',
 ].join('\n')
 
@@ -181,6 +196,76 @@ const fetchEventThread = async (threadId: string): Promise<EventThreadRow | null
   if (error) throw error
   return (data as EventThreadRow | null) ?? null
 }
+
+// 游记
+// read_trip 给模型看的列：去掉 trip_id / client_id / updated_at 这类噪音。
+const TRAVEL_STOP_READ_COLUMNS = 'id, day_index, sort_order, planned_time, name, address, lng, lat, reason, notes, nav_hint, written_by'
+const TRAVEL_CHECKIN_READ_COLUMNS = 'id, checked_at, wgs_lng, wgs_lat, accuracy_m, gcj_lng, gcj_lat, place_name, note, mood, created_at'
+const TRAVEL_AUTHOR_SCHEMA = z.enum(['claude', 'gpt', 'gemini', 'codex_cli', 'claude_code_cli'])
+const TRAVEL_TRIP_STATUS_SCHEMA = z.enum(['planning', 'ongoing', 'done'])
+const TRAVEL_STOP_SCHEMA = z.object({
+  day_index: z.number().int().optional().describe('第几天，出发当天为 1，默认 1'),
+  planned_time: z.string().optional().describe('大致时间，自由文本：「09:30」「上午」「日落前」'),
+  name: z.string().describe('地点名'),
+  address: z.string().optional().describe('地址（可选）'),
+  lng: z.number().optional().describe('经度，GCJ-02（高德坐标），与 lat 成对'),
+  lat: z.number().optional().describe('纬度，GCJ-02（高德坐标），与 lng 成对'),
+  reason: z.string().optional().describe('为什么去'),
+  notes: z.string().optional().describe('注意事项（海拔、门票、开放时间、天气……）'),
+  nav_hint: z.string().optional().describe('路痴导航提示：从上一站怎么过来、在哪下车、认哪个标志物'),
+})
+
+type TravelTripRow = {
+  id: string
+  title: string
+  destination: string | null
+  start_date: string | null
+  end_date: string | null
+  status: TravelTripStatus
+  summary: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+type TravelStopRow = {
+  id: string
+  day_index: number
+  sort_order: number
+  planned_time: string | null
+  name: string
+  address: string | null
+  lng: number | null
+  lat: number | null
+  reason: string | null
+  notes: string | null
+  nav_hint: string | null
+  written_by: string
+}
+
+type TravelCheckinRow = {
+  id: string
+  checked_at: string
+  wgs_lng: number | null
+  wgs_lat: number | null
+  accuracy_m: number | null
+  gcj_lng: number | null
+  gcj_lat: number | null
+  place_name: string | null
+  note: string | null
+  mood: string | null
+  created_at: string
+}
+
+type TravelCommentRow = { id: string; checkin_id: string; author: string; content: string; created_at: string }
+
+const fetchTravelTrip = async (tripId: string): Promise<TravelTripRow | null> => {
+  const { data, error } = await supabase.from('travel_trips').select(TRAVEL_TRIP_COLUMNS).eq('user_id', USER_ID).eq('id', tripId).maybeSingle()
+  if (error) throw error
+  return (data as TravelTripRow | null) ?? null
+}
+
+const travelTripNotFound = (tripId: string) => ({ content: [{ type: 'text' as const, text: `Error: 未找到旅行: ${tripId}（用 list_trips 核对 id）` }] })
 
 const eventThreadNotFound = (threadId: string) => ({ content: [{ type: 'text' as const, text: `Error: 未找到事件线: ${threadId}（用 list_event_threads 核对 id）` }] })
 
@@ -831,6 +916,245 @@ serveMcp('hamster-mcp', (server) => {
       const entry = data?.[0]
       if (!entry) return { content: [{ type: 'text' as const, text: `Error: 未找到条目: ${entry_id}` }] }
       return { content: [{ type: 'text' as const, text: `已更新: ${JSON.stringify(entry)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('list_trips', {
+    title: 'List Trips',
+    description: '读取游记里的旅行列表（标题 / 目的地 / 日期 / 状态），附攻略点数、打卡数与最近一次打卡时间。默认只列计划中与进行中的。',
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      status: z.enum(['active', 'planning', 'ongoing', 'done', 'all']).optional().describe('active（默认，计划中 + 进行中）/ planning / ongoing / done / all'),
+      limit: z.number().optional().describe('返回数量上限，默认20，最大100'),
+    },
+  }, async ({ status, limit }) => {
+    try {
+      const safeLimit = clampLimit(limit, 20, 100)
+      const filter = status ?? 'active'
+      let query = supabase.from('travel_trips').select(TRAVEL_TRIP_COLUMNS).eq('user_id', USER_ID).order('start_date', { ascending: false, nullsFirst: true }).order('created_at', { ascending: false }).limit(safeLimit)
+      if (filter === 'active') query = query.in('status', ['planning', 'ongoing'])
+      else if (filter !== 'all') query = query.eq('status', filter)
+      const { data, error } = await query
+      if (error) return errorResult(error)
+      const trips = ((data ?? []) as TravelTripRow[]).map(({ summary, ...trip }) => ({ ...trip, has_summary: Boolean(summary) }))
+      if (trips.length === 0) return jsonResult([])
+      const tripIds = trips.map((trip) => trip.id)
+      const [{ data: stopRows, error: stopError }, { data: checkinRows, error: checkinError }] = await Promise.all([
+        supabase.from('travel_plan_stops').select('trip_id').in('trip_id', tripIds),
+        supabase.from('travel_checkins').select('trip_id, checked_at').in('trip_id', tripIds),
+      ])
+      if (stopError) return errorResult(stopError)
+      if (checkinError) return errorResult(checkinError)
+      const stopCounts = new Map<string, number>()
+      for (const row of (stopRows ?? []) as { trip_id: string }[]) stopCounts.set(row.trip_id, (stopCounts.get(row.trip_id) ?? 0) + 1)
+      const checkinStats = new Map<string, { count: number; last: string | null }>()
+      for (const row of (checkinRows ?? []) as { trip_id: string; checked_at: string }[]) {
+        const current = checkinStats.get(row.trip_id) ?? { count: 0, last: null }
+        current.count += 1
+        if (!current.last || row.checked_at > current.last) current.last = row.checked_at
+        checkinStats.set(row.trip_id, current)
+      }
+      return jsonResult(trips.map((trip) => ({
+        ...trip,
+        stop_count: stopCounts.get(trip.id) ?? 0,
+        checkin_count: checkinStats.get(trip.id)?.count ?? 0,
+        last_checkin_at: checkinStats.get(trip.id)?.last ?? null,
+      })))
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('read_trip', {
+    title: 'Read Trip',
+    description: '读取一次旅行的全部内容：攻略点（按天排序，附到过 / 跳过 / 还没到）、打卡（按时间排序，附按计划 / 改道 / 新发现、匹配到的计划点与距离、留言）和复盘。',
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      trip_id: z.string().describe('旅行 UUID'),
+    },
+  }, async ({ trip_id }) => {
+    try {
+      const trip = await fetchTravelTrip(trip_id)
+      if (!trip) return travelTripNotFound(trip_id)
+      const [{ data: stopRows, error: stopError }, { data: checkinRows, error: checkinError }] = await Promise.all([
+        supabase.from('travel_plan_stops').select(TRAVEL_STOP_READ_COLUMNS).eq('user_id', USER_ID).eq('trip_id', trip_id).order('day_index', { ascending: true }).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+        supabase.from('travel_checkins').select(TRAVEL_CHECKIN_READ_COLUMNS).eq('user_id', USER_ID).eq('trip_id', trip_id).order('checked_at', { ascending: true }),
+      ])
+      if (stopError) return errorResult(stopError)
+      if (checkinError) return errorResult(checkinError)
+      const stops = (stopRows ?? []) as TravelStopRow[]
+      const checkins = (checkinRows ?? []) as TravelCheckinRow[]
+      const commentsByCheckin = new Map<string, Omit<TravelCommentRow, 'checkin_id'>[]>()
+      if (checkins.length > 0) {
+        const { data: commentRows, error: commentError } = await supabase.from('travel_checkin_comments').select(TRAVEL_COMMENT_COLUMNS).eq('user_id', USER_ID).in('checkin_id', checkins.map((row) => row.id)).order('created_at', { ascending: true })
+        if (commentError) return errorResult(commentError)
+        for (const row of (commentRows ?? []) as TravelCommentRow[]) {
+          commentsByCheckin.set(row.checkin_id, [...(commentsByCheckin.get(row.checkin_id) ?? []), { id: row.id, author: row.author, content: row.content, created_at: row.created_at }])
+        }
+      }
+      const compared = compareTravel({
+        startDate: trip.start_date,
+        tripStatus: trip.status,
+        today: shanghaiDateString(),
+        stops: stops.map((row) => ({ id: row.id, dayIndex: row.day_index, name: row.name, lng: row.lng, lat: row.lat })),
+        checkins: checkins.map((row) => ({ id: row.id, checkedAt: row.checked_at, lng: row.gcj_lng, lat: row.gcj_lat, placeName: row.place_name })),
+      })
+      const stopNames = new Map(stops.map((row) => [row.id, row.name]))
+      return jsonResult({
+        trip,
+        plan: stops.map((row) => {
+          const match = compared.stops.get(row.id)
+          return { ...row, match: match ? TRAVEL_STOP_KIND_LABELS[match.kind] : null, amap_url: buildAmapMarkerUrl(row.name, row.lng, row.lat) }
+        }),
+        checkins: checkins.map((row) => {
+          const match = compared.checkins.get(row.id)
+          return {
+            ...row,
+            day_index: match?.dayIndex ?? null,
+            match: match ? TRAVEL_CHECKIN_KIND_LABELS[match.kind] : null,
+            matched_stop: match?.stopId ? { id: match.stopId, name: stopNames.get(match.stopId) ?? null, distance_m: match.distanceM } : null,
+            comments: commentsByCheckin.get(row.id) ?? [],
+          }
+        }),
+      })
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('add_trip', {
+    title: 'Add Trip',
+    description: '在游记里新建一次旅行（串串在 PWA 里也能建；建之前先 list_trips 看看是不是已经有了）。',
+    inputSchema: {
+      title: z.string().describe('旅行标题，如「贡嘎自驾」'),
+      destination: z.string().optional().describe('目的地'),
+      start_date: z.string().optional().describe('出发日期 YYYY-MM-DD'),
+      end_date: z.string().optional().describe('结束日期 YYYY-MM-DD'),
+      status: TRAVEL_TRIP_STATUS_SCHEMA.optional().describe('planning（默认）/ ongoing / done'),
+      created_by: TRAVEL_AUTHOR_SCHEMA.optional().describe('写入端，默认 claude'),
+    },
+  }, async ({ title, destination, start_date, end_date, status, created_by }) => {
+    try {
+      const normalized = normalizeTravelTripPatch({ title, destination, start_date, end_date, status: status ?? 'planning' })
+      if (!normalized.ok) return { content: [{ type: 'text' as const, text: `Error: ${normalized.error}` }] }
+      const { data, error } = await supabase.from('travel_trips').insert({
+        ...normalized.value,
+        user_id: USER_ID,
+        created_by: created_by ?? 'claude',
+      }).select(TRAVEL_TRIP_COLUMNS).single()
+      if (error) return errorResult(error)
+      return { content: [{ type: 'text' as const, text: `已建旅行: ${JSON.stringify(data)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('update_trip', {
+    title: 'Update Trip',
+    description: '更新旅行的标题 / 目的地 / 日期 / 状态，或写复盘（summary，整体替换）。至少一项。',
+    inputSchema: {
+      trip_id: z.string().describe('旅行 UUID'),
+      title: z.string().optional().describe('新标题'),
+      destination: z.string().nullable().optional().describe('目的地，传 null 清除'),
+      start_date: z.string().nullable().optional().describe('出发日期 YYYY-MM-DD，传 null 清除'),
+      end_date: z.string().nullable().optional().describe('结束日期 YYYY-MM-DD，传 null 清除'),
+      status: TRAVEL_TRIP_STATUS_SCHEMA.optional().describe('planning / ongoing / done'),
+      summary: z.string().nullable().optional().describe('旅行复盘（Markdown，整体替换），传 null 清除'),
+    },
+  }, async ({ trip_id, title, destination, start_date, end_date, status, summary }) => {
+    try {
+      if ([title, destination, start_date, end_date, status, summary].every((value) => value === undefined)) {
+        return { content: [{ type: 'text' as const, text: 'Error: title / destination / start_date / end_date / status / summary 至少需要提供一项' }] }
+      }
+      const existing = await fetchTravelTrip(trip_id)
+      if (!existing) return travelTripNotFound(trip_id)
+      const normalized = normalizeTravelTripPatch({ title, destination, start_date, end_date, status })
+      if (!normalized.ok) return { content: [{ type: 'text' as const, text: `Error: ${normalized.error}` }] }
+      const patch = normalized.value
+      const nextStart = (patch.start_date !== undefined ? patch.start_date : existing.start_date) as string | null
+      const nextEnd = (patch.end_date !== undefined ? patch.end_date : existing.end_date) as string | null
+      if (nextStart && nextEnd && nextEnd < nextStart) return { content: [{ type: 'text' as const, text: 'Error: 结束日期不能早于出发日期' }] }
+      if (summary !== undefined) {
+        const trimmed = summary?.replace(/\r\n?/g, '\n').trim() ?? ''
+        if (trimmed.length > MAX_TRAVEL_SUMMARY_LENGTH) return { content: [{ type: 'text' as const, text: `Error: 复盘不能超过 ${MAX_TRAVEL_SUMMARY_LENGTH} 字` }] }
+        patch.summary = trimmed || null
+      }
+      const { data, error } = await supabase.from('travel_trips').update(patch).eq('user_id', USER_ID).eq('id', trip_id).select(TRAVEL_TRIP_COLUMNS).single()
+      if (error) return errorResult(error)
+      return { content: [{ type: 'text' as const, text: `已更新: ${JSON.stringify(data)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('write_trip_plan', {
+    title: 'Write Trip Plan',
+    description: '给旅行写攻略：一次写入多个计划停留点。mode=append（默认）追加在已有攻略后面；mode=replace 先清空已有攻略再写（需 confirm=true）。坐标用 GCJ-02（高德 POI 原样）。',
+    inputSchema: {
+      trip_id: z.string().describe('旅行 UUID'),
+      stops: z.array(TRAVEL_STOP_SCHEMA).describe(`计划停留点，按游览顺序排列，一次最多 ${MAX_TRAVEL_STOPS_PER_WRITE} 个`),
+      mode: z.enum(['append', 'replace']).optional().describe('append（默认）/ replace'),
+      confirm: z.boolean().optional().describe('mode=replace 时必须显式传 true'),
+      written_by: TRAVEL_AUTHOR_SCHEMA.optional().describe('写入端，默认 claude'),
+    },
+  }, async ({ trip_id, stops, mode, confirm, written_by }) => {
+    try {
+      if (stops.length === 0) return { content: [{ type: 'text' as const, text: 'Error: stops 不能为空' }] }
+      if (stops.length > MAX_TRAVEL_STOPS_PER_WRITE) return { content: [{ type: 'text' as const, text: `Error: 一次最多写 ${MAX_TRAVEL_STOPS_PER_WRITE} 个点` }] }
+      const trip = await fetchTravelTrip(trip_id)
+      if (!trip) return travelTripNotFound(trip_id)
+      const replace = mode === 'replace'
+      if (replace && confirm !== true) return { content: [{ type: 'text' as const, text: 'Error: mode=replace 会清空这次旅行已有的全部攻略点，需显式传 confirm=true' }] }
+      let baseOrder = 0
+      if (!replace) {
+        const { data: last, error: lastError } = await supabase.from('travel_plan_stops').select('sort_order').eq('user_id', USER_ID).eq('trip_id', trip_id).order('sort_order', { ascending: false }).limit(1).maybeSingle()
+        if (lastError) return errorResult(lastError)
+        baseOrder = ((last as { sort_order: number } | null)?.sort_order ?? -1) + 1
+      }
+      const rows: Record<string, unknown>[] = []
+      for (const [index, stop] of stops.entries()) {
+        const normalized = normalizeTravelStopInput(stop, (baseOrder + index) * 10)
+        if (!normalized.ok) return { content: [{ type: 'text' as const, text: `Error: 第 ${index + 1} 个点（${stop.name}）: ${normalized.error}` }] }
+        rows.push({ ...normalized.value, user_id: USER_ID, trip_id, written_by: written_by ?? 'claude' })
+      }
+      if (replace) {
+        const { error: deleteError } = await supabase.from('travel_plan_stops').delete().eq('user_id', USER_ID).eq('trip_id', trip_id)
+        if (deleteError) return errorResult(deleteError)
+      }
+      const { data, error } = await supabase.from('travel_plan_stops').insert(rows).select('id, day_index, sort_order, name')
+      if (error) return errorResult(error)
+      return { content: [{ type: 'text' as const, text: `已${replace ? '重写' : '追加'}「${trip.title}」攻略 ${data?.length ?? 0} 个点: ${JSON.stringify(data)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('add_travel_comment', {
+    title: 'Add Travel Comment',
+    description: '在串串的某个打卡点下留言 / 回复（打卡 id 用 read_trip 查）。',
+    inputSchema: {
+      checkin_id: z.string().describe('打卡 UUID'),
+      content: z.string().describe('留言正文'),
+      author: TRAVEL_AUTHOR_SCHEMA.optional().describe('留言端，默认 claude'),
+    },
+  }, async ({ checkin_id, content, author }) => {
+    try {
+      const trimmed = content.replace(/\r\n?/g, '\n').trim()
+      if (!trimmed) return { content: [{ type: 'text' as const, text: 'Error: 留言不能为空' }] }
+      if (trimmed.length > MAX_TRAVEL_COMMENT_LENGTH) return { content: [{ type: 'text' as const, text: `Error: 留言不能超过 ${MAX_TRAVEL_COMMENT_LENGTH} 字` }] }
+      const { data: checkin, error: checkinError } = await supabase.from('travel_checkins').select('id, place_name').eq('user_id', USER_ID).eq('id', checkin_id).maybeSingle()
+      if (checkinError) return errorResult(checkinError)
+      if (!checkin) return { content: [{ type: 'text' as const, text: `Error: 未找到打卡: ${checkin_id}（用 read_trip 核对 id）` }] }
+      const { data, error } = await supabase.from('travel_checkin_comments').insert({
+        user_id: USER_ID,
+        checkin_id,
+        author: author ?? 'claude',
+        content: trimmed,
+      }).select(TRAVEL_COMMENT_COLUMNS).single()
+      if (error) return errorResult(error)
+      return { content: [{ type: 'text' as const, text: `已留言: ${JSON.stringify(data)}` }] }
     } catch (err) {
       return errorResult(err)
     }

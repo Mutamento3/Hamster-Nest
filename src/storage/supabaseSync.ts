@@ -40,6 +40,11 @@ import type {
   StashFolder,
   StashItem,
   StashStatus,
+  TravelCheckin,
+  TravelCheckinComment,
+  TravelPlanStop,
+  TravelTrip,
+  TravelTripStatus,
   MemoTag,
   MemoryEntry,
   MemoryStatus,
@@ -3345,6 +3350,450 @@ export const deleteStashComment = async (commentId: string): Promise<void> => {
     throw new Error('Supabase 客户端未配置')
   }
   const { error } = await supabase.from('stash_comments').delete().eq('id', commentId)
+  if (error) {
+    throw error
+  }
+}
+
+// ── 游记 ──────────────────────────────────────────────────────────────────
+// 一次旅行 = 攻略点（Syzygy 写）+ 打卡（串串按）+ 打卡留言。打卡离线优先：client_id 是手机端生成的幂等键，
+// 补传用 upsert + ignoreDuplicates，同一次打卡传几遍都只落一条。
+
+const TRAVEL_TRIP_COLUMNS = 'id,user_id,title,destination,start_date,end_date,status,summary,created_by,created_at,updated_at'
+const TRAVEL_STOP_COLUMNS = 'id,user_id,trip_id,day_index,sort_order,planned_time,name,address,lng,lat,reason,notes,nav_hint,written_by,created_at,updated_at'
+const TRAVEL_CHECKIN_COLUMNS = 'id,user_id,trip_id,client_id,checked_at,wgs_lng,wgs_lat,accuracy_m,gcj_lng,gcj_lat,place_name,note,mood,created_at,updated_at'
+const TRAVEL_COMMENT_COLUMNS = 'id,user_id,checkin_id,author,content,created_at,updated_at'
+
+type TravelTripRow = {
+  id: string
+  user_id: string
+  title: string
+  destination: string | null
+  start_date: string | null
+  end_date: string | null
+  status: string
+  summary: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+type TravelStopRow = {
+  id: string
+  user_id: string
+  trip_id: string
+  day_index: number
+  sort_order: number
+  planned_time: string | null
+  name: string
+  address: string | null
+  lng: number | null
+  lat: number | null
+  reason: string | null
+  notes: string | null
+  nav_hint: string | null
+  written_by: string
+  created_at: string
+  updated_at: string
+}
+
+type TravelCheckinRow = {
+  id: string
+  user_id: string
+  trip_id: string
+  client_id: string
+  checked_at: string
+  wgs_lng: number | null
+  wgs_lat: number | null
+  accuracy_m: number | null
+  gcj_lng: number | null
+  gcj_lat: number | null
+  place_name: string | null
+  note: string | null
+  mood: string | null
+  created_at: string
+  updated_at: string
+}
+
+type TravelCommentRow = {
+  id: string
+  user_id: string
+  checkin_id: string
+  author: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+const mapTravelTripRow = (row: TravelTripRow): TravelTrip => ({
+  id: row.id,
+  userId: row.user_id,
+  title: row.title,
+  destination: row.destination,
+  startDate: row.start_date,
+  endDate: row.end_date,
+  status: row.status as TravelTripStatus,
+  summary: row.summary,
+  createdBy: row.created_by,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+const mapTravelStopRow = (row: TravelStopRow): TravelPlanStop => ({
+  id: row.id,
+  userId: row.user_id,
+  tripId: row.trip_id,
+  dayIndex: row.day_index,
+  sortOrder: row.sort_order,
+  plannedTime: row.planned_time,
+  name: row.name,
+  address: row.address,
+  lng: row.lng,
+  lat: row.lat,
+  reason: row.reason,
+  notes: row.notes,
+  navHint: row.nav_hint,
+  writtenBy: row.written_by,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+const mapTravelCheckinRow = (row: TravelCheckinRow): TravelCheckin => ({
+  id: row.id,
+  userId: row.user_id,
+  tripId: row.trip_id,
+  clientId: row.client_id,
+  checkedAt: row.checked_at,
+  wgsLng: row.wgs_lng,
+  wgsLat: row.wgs_lat,
+  accuracyM: row.accuracy_m,
+  gcjLng: row.gcj_lng,
+  gcjLat: row.gcj_lat,
+  placeName: row.place_name,
+  note: row.note,
+  mood: row.mood,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+const mapTravelCommentRow = (row: TravelCommentRow): TravelCheckinComment => ({
+  id: row.id,
+  userId: row.user_id,
+  checkinId: row.checkin_id,
+  author: row.author,
+  content: row.content,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+})
+
+export type TravelTripPayload = {
+  title: string
+  destination: string | null
+  startDate: string | null
+  endDate: string | null
+  status: TravelTripStatus
+}
+
+export type TravelStopPayload = {
+  dayIndex: number
+  sortOrder: number
+  plannedTime: string | null
+  name: string
+  address: string | null
+  lng: number | null
+  lat: number | null
+  reason: string | null
+  notes: string | null
+  navHint: string | null
+}
+
+export type TravelCheckinUpload = {
+  clientId: string
+  tripId: string
+  checkedAt: string
+  wgsLng: number | null
+  wgsLat: number | null
+  accuracyM: number | null
+  gcjLng: number | null
+  gcjLat: number | null
+  placeName: string | null
+  note: string | null
+  mood: string | null
+}
+
+export type TravelTripBundle = {
+  trip: TravelTrip
+  stops: TravelPlanStop[]
+  checkins: TravelCheckin[]
+  comments: TravelCheckinComment[]
+}
+
+const toTravelStopRow = (payload: TravelStopPayload) => ({
+  day_index: payload.dayIndex,
+  sort_order: payload.sortOrder,
+  planned_time: payload.plannedTime,
+  name: payload.name,
+  address: payload.address,
+  lng: payload.lng,
+  lat: payload.lat,
+  reason: payload.reason,
+  notes: payload.notes,
+  nav_hint: payload.navHint,
+})
+
+export const listTravelTrips = async (): Promise<TravelTrip[]> => {
+  if (!supabase) {
+    return []
+  }
+  const userId = await requireAuthenticatedUserId()
+  const { data, error } = await supabase
+    .from('travel_trips')
+    .select(TRAVEL_TRIP_COLUMNS)
+    .eq('user_id', userId)
+    .order('start_date', { ascending: false, nullsFirst: true })
+    .order('created_at', { ascending: false })
+  if (error) {
+    throw error
+  }
+  return (data ?? []).map((row) => mapTravelTripRow(row as TravelTripRow))
+}
+
+export const createTravelTrip = async (payload: TravelTripPayload): Promise<TravelTrip> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const userId = await requireAuthenticatedUserId()
+  const { data, error } = await supabase
+    .from('travel_trips')
+    .insert({
+      user_id: userId,
+      title: payload.title,
+      destination: payload.destination,
+      start_date: payload.startDate,
+      end_date: payload.endDate,
+      status: payload.status,
+      created_by: 'chuanchuan',
+    })
+    .select(TRAVEL_TRIP_COLUMNS)
+    .single()
+  if (error || !data) {
+    throw error ?? new Error('新建旅行失败')
+  }
+  return mapTravelTripRow(data as TravelTripRow)
+}
+
+export const updateTravelTrip = async (
+  tripId: string,
+  payload: Partial<TravelTripPayload & { summary: string | null }>,
+): Promise<TravelTrip> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const updates: Record<string, unknown> = {}
+  if (payload.title !== undefined) updates.title = payload.title
+  if (payload.destination !== undefined) updates.destination = payload.destination
+  if (payload.startDate !== undefined) updates.start_date = payload.startDate
+  if (payload.endDate !== undefined) updates.end_date = payload.endDate
+  if (payload.status !== undefined) updates.status = payload.status
+  if (payload.summary !== undefined) updates.summary = payload.summary
+  const { data, error } = await supabase
+    .from('travel_trips')
+    .update(updates)
+    .eq('id', tripId)
+    .select(TRAVEL_TRIP_COLUMNS)
+    .single()
+  if (error || !data) {
+    throw error ?? new Error('更新旅行失败')
+  }
+  return mapTravelTripRow(data as TravelTripRow)
+}
+
+// 删旅行：攻略点、打卡、留言随外键级联一起删。
+export const deleteTravelTrip = async (tripId: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { error } = await supabase.from('travel_trips').delete().eq('id', tripId)
+  if (error) {
+    throw error
+  }
+}
+
+export const getTravelTripBundle = async (tripId: string): Promise<TravelTripBundle | null> => {
+  if (!supabase) {
+    return null
+  }
+  const userId = await requireAuthenticatedUserId()
+  const [tripResult, stopResult, checkinResult] = await Promise.all([
+    supabase.from('travel_trips').select(TRAVEL_TRIP_COLUMNS).eq('user_id', userId).eq('id', tripId).maybeSingle(),
+    supabase
+      .from('travel_plan_stops')
+      .select(TRAVEL_STOP_COLUMNS)
+      .eq('user_id', userId)
+      .eq('trip_id', tripId)
+      .order('day_index', { ascending: true })
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('travel_checkins')
+      .select(TRAVEL_CHECKIN_COLUMNS)
+      .eq('user_id', userId)
+      .eq('trip_id', tripId)
+      .order('checked_at', { ascending: true }),
+  ])
+  if (tripResult.error) throw tripResult.error
+  if (stopResult.error) throw stopResult.error
+  if (checkinResult.error) throw checkinResult.error
+  if (!tripResult.data) {
+    return null
+  }
+  const checkins = (checkinResult.data ?? []).map((row) => mapTravelCheckinRow(row as TravelCheckinRow))
+  let comments: TravelCheckinComment[] = []
+  if (checkins.length > 0) {
+    const { data, error } = await supabase
+      .from('travel_checkin_comments')
+      .select(TRAVEL_COMMENT_COLUMNS)
+      .eq('user_id', userId)
+      .in('checkin_id', checkins.map((checkin) => checkin.id))
+      .order('created_at', { ascending: true })
+    if (error) {
+      throw error
+    }
+    comments = (data ?? []).map((row) => mapTravelCommentRow(row as TravelCommentRow))
+  }
+  return {
+    trip: mapTravelTripRow(tripResult.data as TravelTripRow),
+    stops: (stopResult.data ?? []).map((row) => mapTravelStopRow(row as TravelStopRow)),
+    checkins,
+    comments,
+  }
+}
+
+export const createTravelStop = async (tripId: string, payload: TravelStopPayload): Promise<TravelPlanStop> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const userId = await requireAuthenticatedUserId()
+  const { data, error } = await supabase
+    .from('travel_plan_stops')
+    .insert({ ...toTravelStopRow(payload), user_id: userId, trip_id: tripId, written_by: 'chuanchuan' })
+    .select(TRAVEL_STOP_COLUMNS)
+    .single()
+  if (error || !data) {
+    throw error ?? new Error('添加攻略点失败')
+  }
+  return mapTravelStopRow(data as TravelStopRow)
+}
+
+export const updateTravelStop = async (stopId: string, payload: TravelStopPayload): Promise<TravelPlanStop> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { data, error } = await supabase
+    .from('travel_plan_stops')
+    .update(toTravelStopRow(payload))
+    .eq('id', stopId)
+    .select(TRAVEL_STOP_COLUMNS)
+    .single()
+  if (error || !data) {
+    throw error ?? new Error('更新攻略点失败')
+  }
+  return mapTravelStopRow(data as TravelStopRow)
+}
+
+export const deleteTravelStop = async (stopId: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { error } = await supabase.from('travel_plan_stops').delete().eq('id', stopId)
+  if (error) {
+    throw error
+  }
+}
+
+// 补传离线打卡：(user_id, client_id) 冲突时保留库里那条，返回成功送达的 client_id。
+export const uploadTravelCheckins = async (uploads: TravelCheckinUpload[]): Promise<string[]> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  if (uploads.length === 0) {
+    return []
+  }
+  const userId = await requireAuthenticatedUserId()
+  const { error } = await supabase.from('travel_checkins').upsert(
+    uploads.map((upload) => ({
+      user_id: userId,
+      trip_id: upload.tripId,
+      client_id: upload.clientId,
+      checked_at: upload.checkedAt,
+      wgs_lng: upload.wgsLng,
+      wgs_lat: upload.wgsLat,
+      accuracy_m: upload.accuracyM,
+      gcj_lng: upload.gcjLng,
+      gcj_lat: upload.gcjLat,
+      place_name: upload.placeName,
+      note: upload.note,
+      mood: upload.mood,
+    })),
+    { onConflict: 'user_id,client_id', ignoreDuplicates: true },
+  )
+  if (error) {
+    throw error
+  }
+  return uploads.map((upload) => upload.clientId)
+}
+
+export const updateTravelCheckin = async (
+  checkinId: string,
+  payload: { placeName: string | null; note: string | null; mood: string | null },
+): Promise<TravelCheckin> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { data, error } = await supabase
+    .from('travel_checkins')
+    .update({ place_name: payload.placeName, note: payload.note, mood: payload.mood })
+    .eq('id', checkinId)
+    .select(TRAVEL_CHECKIN_COLUMNS)
+    .single()
+  if (error || !data) {
+    throw error ?? new Error('更新打卡失败')
+  }
+  return mapTravelCheckinRow(data as TravelCheckinRow)
+}
+
+export const deleteTravelCheckin = async (checkinId: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { error } = await supabase.from('travel_checkins').delete().eq('id', checkinId)
+  if (error) {
+    throw error
+  }
+}
+
+// 串串在网页端留言固定署名 chuanchuan；端口的回复走 MCP（add_travel_comment）。
+export const createTravelComment = async (checkinId: string, content: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const userId = await requireAuthenticatedUserId()
+  const { error } = await supabase.from('travel_checkin_comments').insert({
+    user_id: userId,
+    checkin_id: checkinId,
+    author: 'chuanchuan',
+    content,
+  })
+  if (error) {
+    throw error
+  }
+}
+
+export const deleteTravelComment = async (commentId: string): Promise<void> => {
+  if (!supabase) {
+    throw new Error('Supabase 客户端未配置')
+  }
+  const { error } = await supabase.from('travel_checkin_comments').delete().eq('id', commentId)
   if (error) {
     throw error
   }

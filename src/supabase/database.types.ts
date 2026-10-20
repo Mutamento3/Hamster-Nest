@@ -3830,6 +3830,213 @@ export type Database = {
           },
         ]
       }
+      travel_checkin_comments: {
+        Row: {
+          author: string
+          checkin_id: string
+          content: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author?: string
+          checkin_id: string
+          content: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author?: string
+          checkin_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_checkin_comments_checkin_id_fkey"
+            columns: ["checkin_id"]
+            isOneToOne: false
+            referencedRelation: "travel_checkins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      travel_checkins: {
+        Row: {
+          accuracy_m: number | null
+          checked_at: string
+          client_id: string
+          created_at: string
+          gcj_lat: number | null
+          gcj_lng: number | null
+          id: string
+          mood: string | null
+          note: string | null
+          place_name: string | null
+          trip_id: string
+          updated_at: string
+          user_id: string
+          wgs_lat: number | null
+          wgs_lng: number | null
+        }
+        Insert: {
+          accuracy_m?: number | null
+          checked_at: string
+          client_id: string
+          created_at?: string
+          gcj_lat?: number | null
+          gcj_lng?: number | null
+          id?: string
+          mood?: string | null
+          note?: string | null
+          place_name?: string | null
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          wgs_lat?: number | null
+          wgs_lng?: number | null
+        }
+        Update: {
+          accuracy_m?: number | null
+          checked_at?: string
+          client_id?: string
+          created_at?: string
+          gcj_lat?: number | null
+          gcj_lng?: number | null
+          id?: string
+          mood?: string | null
+          note?: string | null
+          place_name?: string | null
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          wgs_lat?: number | null
+          wgs_lng?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_checkins_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "travel_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      travel_plan_stops: {
+        Row: {
+          address: string | null
+          created_at: string
+          day_index: number
+          id: string
+          lat: number | null
+          lng: number | null
+          name: string
+          nav_hint: string | null
+          notes: string | null
+          planned_time: string | null
+          reason: string | null
+          sort_order: number
+          trip_id: string
+          updated_at: string
+          user_id: string
+          written_by: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          day_index?: number
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name: string
+          nav_hint?: string | null
+          notes?: string | null
+          planned_time?: string | null
+          reason?: string | null
+          sort_order?: number
+          trip_id: string
+          updated_at?: string
+          user_id: string
+          written_by?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          day_index?: number
+          id?: string
+          lat?: number | null
+          lng?: number | null
+          name?: string
+          nav_hint?: string | null
+          notes?: string | null
+          planned_time?: string | null
+          reason?: string | null
+          sort_order?: number
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+          written_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "travel_plan_stops_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "travel_trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      travel_trips: {
+        Row: {
+          created_at: string
+          created_by: string
+          destination: string | null
+          end_date: string | null
+          id: string
+          start_date: string | null
+          status: string
+          summary: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          start_date?: string | null
+          status?: string
+          summary?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          destination?: string | null
+          end_date?: string | null
+          id?: string
+          start_date?: string | null
+          status?: string
+          summary?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       usage_quota: {
         Row: {
           count: number
