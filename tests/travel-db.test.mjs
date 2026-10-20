@@ -1,9 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 
-const migration = await readFile(new URL('../supabase/migrations/20261020120000_travel_journal.sql', import.meta.url), 'utf8')
+// 生产库分 8 次应用，仓库里也是 8 份按版本号排列的文件；按顺序全部跑一遍。
+const MIGRATIONS_DIR = new URL('../supabase/migrations/', import.meta.url)
+const migrationFiles = (await readdir(MIGRATIONS_DIR)).filter((name) => /^20261020\d+_travel_journal.*\.sql$/.test(name)).sort()
+const migrations = await Promise.all(migrationFiles.map((name) => readFile(new URL(name, MIGRATIONS_DIR), 'utf8')))
 const owner = '11111111-1111-4111-8111-111111111111'
 const stranger = '22222222-2222-4222-8222-222222222222'
 
@@ -18,11 +21,15 @@ async function setup() {
     grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;
     create function public.set_updated_at() returns trigger language plpgsql as $$begin new.updated_at := now(); return new; end$$;
   `)
-  await db.exec(migration)
+  for (const sql of migrations) await db.exec(sql)
   return db
 }
 
 const as = (db, userId) => db.exec(`reset role; set role authenticated; select set_config('request.jwt.claim.sub', '${userId}', false)`)
+
+test('travel migrations are split into the eight production versions', () => {
+  assert.equal(migrationFiles.length, 8)
+})
 
 test('travel tables: owner-only RLS, cascade delete and idempotent offline check-ins', async () => {
   const db = await setup()

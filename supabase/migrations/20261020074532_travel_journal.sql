@@ -18,6 +18,12 @@
 set lock_timeout = '5s';
 set statement_timeout = '2min';
 
+-- 生产库经 Supabase MCP 分 8 次应用（单次整份迁移会超时），仓库里的文件与线上版本号一一对应：
+--   20261020074532 建表 + 开 RLS + 授权（本文件）
+--   20261020074825 / 074833 / 074837 / 074841  四张表的 RLS 策略
+--   20261020074845 updated_at 触发器
+--   20261020074853 / 074858 同业主守卫
+
 -- ── 旅行 ─────────────────────────────────────────────────────────────────────
 
 create table if not exists public.travel_trips (
@@ -158,148 +164,12 @@ create index if not exists idx_travel_checkin_comments_checkin_created
 create index if not exists idx_travel_checkin_comments_user_id
   on public.travel_checkin_comments using btree (user_id);
 
--- ── 触发器 ───────────────────────────────────────────────────────────────────
-
-drop trigger if exists trg_travel_trips_updated_at on public.travel_trips;
-create trigger trg_travel_trips_updated_at
-  before update on public.travel_trips
-  for each row execute function public.set_updated_at();
-
-drop trigger if exists trg_travel_plan_stops_updated_at on public.travel_plan_stops;
-create trigger trg_travel_plan_stops_updated_at
-  before update on public.travel_plan_stops
-  for each row execute function public.set_updated_at();
-
-drop trigger if exists trg_travel_checkins_updated_at on public.travel_checkins;
-create trigger trg_travel_checkins_updated_at
-  before update on public.travel_checkins
-  for each row execute function public.set_updated_at();
-
-drop trigger if exists trg_travel_checkin_comments_updated_at on public.travel_checkin_comments;
-create trigger trg_travel_checkin_comments_updated_at
-  before update on public.travel_checkin_comments
-  for each row execute function public.set_updated_at();
-
--- 攻略点与打卡挂的旅行必须同属一个业主（外键只管存在，不管归属）。
-create or replace function public.guard_travel_trip_owner()
-returns trigger
-language plpgsql
-set search_path to 'public'
-as $function$
-declare
-  trip_owner uuid;
-begin
-  select user_id into trip_owner from public.travel_trips where id = new.trip_id;
-  if trip_owner is null then
-    raise exception '旅行不存在: %', new.trip_id using errcode = 'foreign_key_violation';
-  end if;
-  if trip_owner <> new.user_id then
-    raise exception '旅行不属于同一业主' using errcode = 'check_violation';
-  end if;
-  return new;
-end;
-$function$;
-
-revoke all on function public.guard_travel_trip_owner() from public, anon, authenticated;
-
-drop trigger if exists trg_travel_plan_stops_owner_guard on public.travel_plan_stops;
-create trigger trg_travel_plan_stops_owner_guard
-  before insert or update of trip_id, user_id on public.travel_plan_stops
-  for each row execute function public.guard_travel_trip_owner();
-
-drop trigger if exists trg_travel_checkins_owner_guard on public.travel_checkins;
-create trigger trg_travel_checkins_owner_guard
-  before insert or update of trip_id, user_id on public.travel_checkins
-  for each row execute function public.guard_travel_trip_owner();
-
-create or replace function public.guard_travel_comment_owner()
-returns trigger
-language plpgsql
-set search_path to 'public'
-as $function$
-declare
-  checkin_owner uuid;
-begin
-  select user_id into checkin_owner from public.travel_checkins where id = new.checkin_id;
-  if checkin_owner is null then
-    raise exception '打卡不存在: %', new.checkin_id using errcode = 'foreign_key_violation';
-  end if;
-  if checkin_owner <> new.user_id then
-    raise exception '打卡不属于同一业主' using errcode = 'check_violation';
-  end if;
-  return new;
-end;
-$function$;
-
-revoke all on function public.guard_travel_comment_owner() from public, anon, authenticated;
-
-drop trigger if exists trg_travel_checkin_comments_owner_guard on public.travel_checkin_comments;
-create trigger trg_travel_checkin_comments_owner_guard
-  before insert or update of checkin_id, user_id on public.travel_checkin_comments
-  for each row execute function public.guard_travel_comment_owner();
-
--- ── RLS：业主本人读写；service_role（MCP）绕过 RLS ─────────────────────────────
+-- ── RLS 与授权：开 RLS 的同时收掉 anon，策略在后面四份迁移里；service_role（MCP）绕过 RLS ──
 
 alter table public.travel_trips enable row level security;
 alter table public.travel_plan_stops enable row level security;
 alter table public.travel_checkins enable row level security;
 alter table public.travel_checkin_comments enable row level security;
-
-drop policy if exists travel_trips_select_own on public.travel_trips;
-create policy travel_trips_select_own on public.travel_trips for select to authenticated
-  using ((select auth.uid()) = user_id);
-drop policy if exists travel_trips_insert_own on public.travel_trips;
-create policy travel_trips_insert_own on public.travel_trips for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_trips_update_own on public.travel_trips;
-create policy travel_trips_update_own on public.travel_trips for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_trips_delete_own on public.travel_trips;
-create policy travel_trips_delete_own on public.travel_trips for delete to authenticated
-  using ((select auth.uid()) = user_id);
-
-drop policy if exists travel_plan_stops_select_own on public.travel_plan_stops;
-create policy travel_plan_stops_select_own on public.travel_plan_stops for select to authenticated
-  using ((select auth.uid()) = user_id);
-drop policy if exists travel_plan_stops_insert_own on public.travel_plan_stops;
-create policy travel_plan_stops_insert_own on public.travel_plan_stops for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_plan_stops_update_own on public.travel_plan_stops;
-create policy travel_plan_stops_update_own on public.travel_plan_stops for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_plan_stops_delete_own on public.travel_plan_stops;
-create policy travel_plan_stops_delete_own on public.travel_plan_stops for delete to authenticated
-  using ((select auth.uid()) = user_id);
-
-drop policy if exists travel_checkins_select_own on public.travel_checkins;
-create policy travel_checkins_select_own on public.travel_checkins for select to authenticated
-  using ((select auth.uid()) = user_id);
-drop policy if exists travel_checkins_insert_own on public.travel_checkins;
-create policy travel_checkins_insert_own on public.travel_checkins for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_checkins_update_own on public.travel_checkins;
-create policy travel_checkins_update_own on public.travel_checkins for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_checkins_delete_own on public.travel_checkins;
-create policy travel_checkins_delete_own on public.travel_checkins for delete to authenticated
-  using ((select auth.uid()) = user_id);
-
-drop policy if exists travel_checkin_comments_select_own on public.travel_checkin_comments;
-create policy travel_checkin_comments_select_own on public.travel_checkin_comments for select to authenticated
-  using ((select auth.uid()) = user_id);
-drop policy if exists travel_checkin_comments_insert_own on public.travel_checkin_comments;
-create policy travel_checkin_comments_insert_own on public.travel_checkin_comments for insert to authenticated
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_checkin_comments_update_own on public.travel_checkin_comments;
-create policy travel_checkin_comments_update_own on public.travel_checkin_comments for update to authenticated
-  using ((select auth.uid()) = user_id)
-  with check ((select auth.uid()) = user_id);
-drop policy if exists travel_checkin_comments_delete_own on public.travel_checkin_comments;
-create policy travel_checkin_comments_delete_own on public.travel_checkin_comments for delete to authenticated
-  using ((select auth.uid()) = user_id);
 
 revoke all on table public.travel_trips from anon;
 revoke all on table public.travel_plan_stops from anon;
