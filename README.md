@@ -343,7 +343,7 @@ npm test
 | `council_propose` | 发起正式提案（open 状态，可带风险等级 / 目标模块） |
 | `council_review` | 对提案写评审（支持 / 中立 / 反对，挂在提案下） |
 | `council_decide` | 串串对提案拍板（通过 / 拒绝 / 暂缓 / 已生成方案） |
-| `council_read` | 查询议事厅条目（按状态 / 类型 / 父级筛选） |
+| `council_read` | 查询议事厅条目（按状态 / 类型 / 父级筛选）；列表默认只给摘要，正文按 `id` 读单条 |
 | `council_report` | 提交执行回执并更新提案状态 |
 | `add_diary_entry` | 写一页日记（署名 / 标题 / 正文 / 心情 / 类型，默认 private 上锁；自由活动回执用 free_activity） |
 | `read_diary` | 读日记本（含 private 页全文），按日期倒序，可按署名 / 日期范围 / 可见性筛选，每页随带留言 |
