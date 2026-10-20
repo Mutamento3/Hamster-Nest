@@ -105,13 +105,16 @@ const readJson = <T,>(key: string, fallback: T): T => {
   }
 }
 
-const writeJson = (key: string, value: unknown) => {
+// 返回是否真的写进去了：存储满了 / 无痕模式写不进时，打卡不能假装「已存进手机」。
+const writeJson = (key: string, value: unknown): boolean => {
   const storage = safeStorage()
-  if (!storage) return
+  if (!storage) return false
   try {
     storage.setItem(key, JSON.stringify(value))
+    return true
   } catch (error) {
     console.warn('游记本地存储写入失败', error)
+    return false
   }
 }
 
@@ -126,9 +129,10 @@ export const readPendingCheckins = (): TravelCheckinUpload[] => {
   return Array.isArray(list) ? list.filter((item) => item && typeof item.clientId === 'string') : []
 }
 
-export const addPendingCheckin = (upload: TravelCheckinUpload) => {
+// 返回 false 表示手机里没存住，调用方要自己兜底（直接上传或保留草稿）。
+export const addPendingCheckin = (upload: TravelCheckinUpload): boolean => {
   const list = readPendingCheckins().filter((item) => item.clientId !== upload.clientId)
-  writeJson(PENDING_KEY, [...list, upload])
+  return writeJson(PENDING_KEY, [...list, upload])
 }
 
 export const removePendingCheckins = (predicate: (item: TravelCheckinUpload) => boolean) => {
@@ -154,7 +158,9 @@ export const readFailedCheckins = (): FailedTravelCheckin[] => {
   return Array.isArray(list) ? list.filter((item) => item && item.upload && typeof item.upload.clientId === 'string') : []
 }
 
-export const clearFailedCheckins = () => writeJson(FAILED_KEY, [])
+export const clearFailedCheckins = () => {
+  writeJson(FAILED_KEY, [])
+}
 
 const quarantineCheckins = (items: FailedTravelCheckin[]) => {
   if (items.length === 0) return

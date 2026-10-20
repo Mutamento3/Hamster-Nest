@@ -12,6 +12,7 @@ import {
   updateTravelCheckin,
   updateTravelStop,
   updateTravelTrip,
+  uploadTravelCheckins,
   type TravelCheckinUpload,
   type TravelTripBundle,
 } from '../storage/supabaseSync'
@@ -337,7 +338,20 @@ const TravelTripPage = () => {
       note: sheet.note.trim().slice(0, 2000) || null,
       mood: sheet.mood,
     }
-    addPendingCheckin(upload)
+    if (!addPendingCheckin(upload)) {
+      // 手机存储写不进（满了 / 无痕模式）：直接传；传不上就别关面板，草稿留着，不能假装存住了。
+      try {
+        await uploadTravelCheckins([upload])
+        setSheet(null)
+        setTab('route')
+        setNotice('打卡成功（手机里存不下，直接传上去了）')
+        await refresh()
+      } catch (uploadError) {
+        console.warn('打卡既存不进手机也传不上去', uploadError)
+        setFormError('手机存储满了、现在也连不上，这次打卡没存住。先截个图，有信号再点一次「打卡」')
+      }
+      return
+    }
     reloadPending()
     setSheet(null)
     setTab('route')
@@ -488,6 +502,11 @@ const TravelTripPage = () => {
   const saveCheckinEdit = async (event: FormEvent) => {
     event.preventDefault()
     if (!checkinEditor) return
+    const { checkin } = checkinEditor
+    if (checkin.gcjLng === null && checkin.gcjLat === null && !checkinEditor.placeName.trim()) {
+      setFormError('这次打卡没有定位，地名得留着，不然就不知道是哪了')
+      return
+    }
     setSaving(true)
     try {
       await updateTravelCheckin(checkinEditor.checkin.id, {

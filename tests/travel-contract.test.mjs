@@ -133,3 +133,15 @@ test('only data-level upload errors count as permanent; network and auth errors 
   assert.equal(isPermanentTravelUploadError(new TypeError('Failed to fetch')), false)
   assert.equal(isPermanentTravelUploadError(null), false)
 })
+
+test('name matching only applies to check-ins without coordinates', () => {
+  const result = compareTravel({
+    startDate: '2026-10-22',
+    tripStatus: 'ongoing',
+    today: '2026-10-22',
+    stops,
+    checkins: [{ id: 'far', checkedAt: '2026-10-23T01:00:00Z', lng: 102.5, lat: 30.5, placeName: '子梅垭口' }],
+  })
+  assert.equal(result.checkins.get('far').kind, 'discovery')
+  assert.equal(result.stops.get('zimei').kind, 'pending')
+})

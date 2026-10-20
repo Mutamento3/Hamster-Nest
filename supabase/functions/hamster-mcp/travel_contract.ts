@@ -179,7 +179,8 @@ export const compareTravel = (input: {
         if (distance <= TRAVEL_MATCH_RADIUS_M && (!best || (best.distance ?? Infinity) > distance)) best = { stop, distance }
       }
     }
-    if (!best) {
+    // 有坐标就只认坐标：人在别处却写了计划里的地名，不能算到过。
+    if (!best && (checkin.lng === null || checkin.lat === null)) {
       const named = input.stops.find((stop) => sameName(stop.name, checkin.placeName))
       if (named) best = { stop: named, distance: null }
     }
