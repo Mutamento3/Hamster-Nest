@@ -2,7 +2,7 @@ import type { TravelCheckin, TravelTrip, TravelTripStatus } from '../types'
 import type { TravelCheckinUpload, TravelTripBundle } from '../storage/supabaseSync'
 import { uploadTravelCheckins } from '../storage/supabaseSync'
 import { getRecordSourceLabel } from '../constants/recordSources'
-import { normalizeTravelTripPatch } from '../../supabase/functions/hamster-mcp/travel_contract'
+import { isPermanentTravelUploadError, normalizeTravelTripPatch } from '../../supabase/functions/hamster-mcp/travel_contract'
 
 // 游记共用：标签、离线打卡队列、离线缓存、定位、示意地图投影。
 // 对比规则与坐标转换在 travel_contract.ts（与 MCP 共用）。
@@ -144,18 +144,59 @@ export const createCheckinClientId = () => {
   return `ck-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`
 }
 
+// 传不上去的坏数据（比如旅行在别的设备上被删了）隔离到这里，不删、不重试，留给串串看一眼再清。
+const FAILED_KEY = 'hamster-nest:travel:failed-checkins:v1'
+
+export type FailedTravelCheckin = { upload: TravelCheckinUpload; error: string; failedAt: string }
+
+export const readFailedCheckins = (): FailedTravelCheckin[] => {
+  const list = readJson<FailedTravelCheckin[]>(FAILED_KEY, [])
+  return Array.isArray(list) ? list.filter((item) => item && item.upload && typeof item.upload.clientId === 'string') : []
+}
+
+export const clearFailedCheckins = () => writeJson(FAILED_KEY, [])
+
+const quarantineCheckins = (items: FailedTravelCheckin[]) => {
+  if (items.length === 0) return
+  const ids = new Set(items.map((item) => item.upload.clientId))
+  writeJson(FAILED_KEY, [...readFailedCheckins().filter((item) => !ids.has(item.upload.clientId)), ...items])
+  removePendingCheckins((item) => ids.has(item.clientId))
+}
+
+const errorMessage = (error: unknown) =>
+  error && typeof error === 'object' && 'message' in error ? String((error as { message: unknown }).message) : String(error)
+
 let flushing: Promise<number> | null = null
 
-// 把队列里的打卡送上去，返回这次送达的条数。离线或失败时原样留在队列里。
+// 把队列里的打卡送上去，返回这次送达的条数。离线或网络失败时原样留在队列里；
+// 整批因为某条数据本身坏了而被拒时，逐条重传，把坏的那几条隔离出去，好的照常送达。
 export const flushPendingCheckins = async (): Promise<number> => {
   if (flushing) return flushing
   flushing = (async () => {
     const pending = readPendingCheckins()
     if (pending.length === 0) return 0
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return 0
-    const sent = new Set(await uploadTravelCheckins(pending))
-    removePendingCheckins((item) => sent.has(item.clientId))
-    return sent.size
+    try {
+      const sent = new Set(await uploadTravelCheckins(pending))
+      removePendingCheckins((item) => sent.has(item.clientId))
+      return sent.size
+    } catch (batchError) {
+      if (!isPermanentTravelUploadError(batchError)) throw batchError
+    }
+    let sentCount = 0
+    const broken: FailedTravelCheckin[] = []
+    for (const item of pending) {
+      try {
+        await uploadTravelCheckins([item])
+        removePendingCheckins((queued) => queued.clientId === item.clientId)
+        sentCount += 1
+      } catch (itemError) {
+        if (!isPermanentTravelUploadError(itemError)) throw itemError
+        broken.push({ upload: item, error: errorMessage(itemError), failedAt: new Date().toISOString() })
+      }
+    }
+    quarantineCheckins(broken)
+    return sentCount
   })()
   try {
     return await flushing

@@ -5,10 +5,12 @@ import { createTravelTrip, listTravelTrips } from '../storage/supabaseSync'
 import TravelTripEditorFields from '../components/TravelTripEditorFields'
 import {
   TRAVEL_STATUS_LABELS,
+  clearFailedCheckins,
   emptyTripEditor,
   flushPendingCheckins,
   formatTravelDateRange,
   readCachedTrips,
+  readFailedCheckins,
   readPendingCheckins,
   tripEditorToPatch,
   writeCachedTrips,
@@ -26,6 +28,7 @@ const TravelPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pendingCount, setPendingCount] = useState(() => readPendingCheckins().length)
+  const [failedCount, setFailedCount] = useState(() => readFailedCheckins().length)
   const [editor, setEditor] = useState<TripEditorState | null>(null)
   const [editorError, setEditorError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -38,6 +41,7 @@ const TravelPage = () => {
       console.warn('补传离线打卡失败', syncError)
     } finally {
       setPendingCount(readPendingCheckins().length)
+      setFailedCount(readFailedCheckins().length)
     }
   }, [])
 
@@ -145,6 +149,21 @@ const TravelPage = () => {
         <button type="button" className="travel-pending-banner" onClick={() => void syncPending()}>
           📮 还有 {pendingCount} 个打卡在手机里排队，点一下试着补传
         </button>
+      ) : null}
+      {failedCount > 0 ? (
+        <div className="travel-error travel-failed-banner">
+          <span>⚠️ 有 {failedCount} 个打卡传不上去（多半是那次旅行已经被删了），先隔离在手机里，没有混进别的旅行。</span>
+          <button
+            type="button"
+            className="travel-inline-btn"
+            onClick={() => {
+              clearFailedCheckins()
+              setFailedCount(0)
+            }}
+          >
+            知道了，清掉
+          </button>
+        </div>
       ) : null}
       {notice ? <p className="travel-notice">{notice}</p> : null}
       {error ? <p className="travel-error">{error}</p> : null}

@@ -6,6 +6,8 @@ const {
   buildAmapMarkerUrl,
   compareTravel,
   distanceMeters,
+  isPermanentTravelUploadError,
+  nextTravelSortOrders,
   normalizeTravelStopInput,
   normalizeTravelTripPatch,
   shanghaiDateOf,
@@ -108,4 +110,26 @@ test('amap links open a marker when coordinates exist and a search otherwise', (
     'https://uri.amap.com/marker?position=101.8466,29.6327&name=%E5%AD%90%E6%A2%85%E5%9E%AD%E5%8F%A3&src=hamster-nest&coordinate=gaode&callnative=1',
   )
   assert.match(buildAmapMarkerUrl('冷嘎措', null, null), /^https:\/\/uri\.amap\.com\/search\?keyword=/)
+})
+
+test('append sort orders grow linearly from the current maximum, never geometrically', () => {
+  assert.deepEqual(nextTravelSortOrders(null, 3), [0, 10, 20])
+  assert.deepEqual(nextTravelSortOrders(20, 2), [30, 40])
+  let max = null
+  for (let round = 0; round < 50; round += 1) {
+    const orders = nextTravelSortOrders(max, 5)
+    max = orders.at(-1)
+  }
+  assert.equal(max, 2490)
+})
+
+test('only data-level upload errors count as permanent; network and auth errors stay queued', () => {
+  assert.equal(isPermanentTravelUploadError({ code: '23503', message: '旅行不存在' }), true)
+  assert.equal(isPermanentTravelUploadError({ code: '23514' }), true)
+  assert.equal(isPermanentTravelUploadError({ code: '22P02' }), true)
+  assert.equal(isPermanentTravelUploadError({ code: '22001' }), true)
+  assert.equal(isPermanentTravelUploadError({ code: '42501' }), true)
+  assert.equal(isPermanentTravelUploadError({ code: 'PGRST301', message: 'JWT expired' }), false)
+  assert.equal(isPermanentTravelUploadError(new TypeError('Failed to fetch')), false)
+  assert.equal(isPermanentTravelUploadError(null), false)
 })

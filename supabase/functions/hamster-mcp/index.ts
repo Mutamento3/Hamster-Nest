@@ -11,6 +11,7 @@ import {
   TRAVEL_TRIP_COLUMNS,
   buildAmapMarkerUrl,
   compareTravel,
+  nextTravelSortOrders,
   normalizeTravelStopInput,
   normalizeTravelTripPatch,
   type TravelTripStatus,
@@ -1107,24 +1108,33 @@ serveMcp('hamster-mcp', (server) => {
       if (!trip) return travelTripNotFound(trip_id)
       const replace = mode === 'replace'
       if (replace && confirm !== true) return { content: [{ type: 'text' as const, text: 'Error: mode=replace 会清空这次旅行已有的全部攻略点，需显式传 confirm=true' }] }
-      let baseOrder = 0
-      if (!replace) {
+      // replace 先插新的、再删旧的：插入失败时旧攻略原样还在；删旧的失败时最坏是新旧并存，不会一个点都不剩。
+      let currentMax: number | null = null
+      let oldIds: string[] = []
+      if (replace) {
+        const { data: existing, error: existingError } = await supabase.from('travel_plan_stops').select('id').eq('user_id', USER_ID).eq('trip_id', trip_id)
+        if (existingError) return errorResult(existingError)
+        oldIds = ((existing ?? []) as { id: string }[]).map((row) => row.id)
+      } else {
         const { data: last, error: lastError } = await supabase.from('travel_plan_stops').select('sort_order').eq('user_id', USER_ID).eq('trip_id', trip_id).order('sort_order', { ascending: false }).limit(1).maybeSingle()
         if (lastError) return errorResult(lastError)
-        baseOrder = ((last as { sort_order: number } | null)?.sort_order ?? -1) + 1
+        currentMax = (last as { sort_order: number } | null)?.sort_order ?? null
       }
+      const sortOrders = nextTravelSortOrders(currentMax, stops.length)
       const rows: Record<string, unknown>[] = []
       for (const [index, stop] of stops.entries()) {
-        const normalized = normalizeTravelStopInput(stop, (baseOrder + index) * 10)
+        const normalized = normalizeTravelStopInput(stop, sortOrders[index])
         if (!normalized.ok) return { content: [{ type: 'text' as const, text: `Error: 第 ${index + 1} 个点（${stop.name}）: ${normalized.error}` }] }
         rows.push({ ...normalized.value, user_id: USER_ID, trip_id, written_by: written_by ?? 'claude' })
       }
-      if (replace) {
-        const { error: deleteError } = await supabase.from('travel_plan_stops').delete().eq('user_id', USER_ID).eq('trip_id', trip_id)
-        if (deleteError) return errorResult(deleteError)
-      }
       const { data, error } = await supabase.from('travel_plan_stops').insert(rows).select('id, day_index, sort_order, name')
       if (error) return errorResult(error)
+      if (oldIds.length > 0) {
+        const { error: deleteError } = await supabase.from('travel_plan_stops').delete().eq('user_id', USER_ID).eq('trip_id', trip_id).in('id', oldIds)
+        if (deleteError) {
+          return { content: [{ type: 'text' as const, text: `Error: 新攻略 ${data?.length ?? 0} 个点已写入，但旧的 ${oldIds.length} 个点没删掉（${deleteError.message}）。现在新旧并存，可以再 replace 一次，或让串串在 PWA 里删掉旧点。新点: ${JSON.stringify(data)}` }] }
+        }
+      }
       return { content: [{ type: 'text' as const, text: `已${replace ? '重写' : '追加'}「${trip.title}」攻略 ${data?.length ?? 0} 个点: ${JSON.stringify(data)}` }] }
     } catch (err) {
       return errorResult(err)

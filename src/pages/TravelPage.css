@@ -209,6 +209,14 @@
 .travel-error { color: #b13f4d; border-color: rgba(255, 181, 192, 0.7); }
 .travel-offline { color: #6b6a86; border-color: rgba(190, 190, 214, 0.7); background: #f8f8fc; }
 
+.travel-failed-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.5;
+}
+
 .travel-pending-banner {
   border: 1px dashed rgba(92, 196, 180, 0.8);
   border-radius: 12px;

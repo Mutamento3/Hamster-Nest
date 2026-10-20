@@ -211,6 +211,25 @@ export const compareTravel = (input: {
   return { checkins: checkinMatches, stops: stopMatches }
 }
 
+// ── 攻略点排序 ─────────────────────────────────────────────────────────────
+// 每站之间留 10 的空隙，方便以后手动插队；追加时接在已有最大值后面线性往下排。
+
+export const TRAVEL_SORT_STEP = 10
+
+export const nextTravelSortOrders = (currentMax: number | null, count: number): number[] => {
+  const first = currentMax === null ? 0 : currentMax + TRAVEL_SORT_STEP
+  return Array.from({ length: count }, (_, index) => first + index * TRAVEL_SORT_STEP)
+}
+
+// ── 离线补传：哪些失败是「这条数据本身坏了」，重传多少遍都没用 ───────────────
+// 23xxx 完整性约束（旅行被删 / 不属于同一业主 / check 约束）、22xxx 数据异常、42501 RLS 拒绝：
+// 这类单独隔离出队列，别让一条坏数据把后面所有打卡一起堵死。网络错误、登录过期等不算，留在队列里等下次。
+
+export const isPermanentTravelUploadError = (error: unknown) => {
+  const code = error && typeof error === 'object' && 'code' in error ? String((error as { code: unknown }).code ?? '') : ''
+  return /^2[23][0-9A-Z]{3}$/u.test(code) || code === '42501'
+}
+
 // ── 高德导航链接（路痴友好：点一下直接在高德里打开）──────────────────────────
 
 export const buildAmapMarkerUrl = (name: string, lng: number | null, lat: number | null) => {
