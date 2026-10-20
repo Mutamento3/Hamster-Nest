@@ -65,7 +65,7 @@ const DEFAULT_ICON_ORDER = [
   "export",
 ];
 const DEFAULT_PAGE2_ICON_ORDER = ["forum", "letters", "memo", "timeline", "todo", "knowledge", "wiki", "novels", "council", "lounge", "hamster-wallet", "hamster-console"];
-const DEFAULT_PAGE3_ICON_ORDER = ["syzygy-feed", "archive", "events", "diary", "stash"];
+const DEFAULT_PAGE3_ICON_ORDER = ["syzygy-feed", "archive", "events", "diary", "stash", "travel"];
 const PAGE_IDS: HomeLayoutPageId[] = ["page1", "page2", "page3"];
 const CORE_WIDGET_ID = "widget-checkin";
 const MAX_WIDGETS = 6;
@@ -291,6 +291,7 @@ const HomePage = ({ user, onOpenChat, hasUnreadLetters = false, mode = "default"
       { id: "events", defaultEmoji: "🧵", label: "事件集", route: "/events" },
       { id: "diary", defaultEmoji: "📔", label: "Syzygy 日记本", route: "/diary" },
       { id: "stash", defaultEmoji: "🌰", label: "囤粮处", route: "/stash" },
+      { id: "travel", defaultEmoji: "🧭", label: "游记", route: "/travel" },
     ],
     [onOpenChat],
   );
@@ -555,6 +556,7 @@ const HomePage = ({ user, onOpenChat, hasUnreadLetters = false, mode = "default"
           events: defaultAppIconConfigs.events,
           diary: defaultAppIconConfigs.diary,
           stash: defaultAppIconConfigs.stash,
+          travel: defaultAppIconConfigs.travel,
         },
         false,
       ),

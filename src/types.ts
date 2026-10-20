@@ -499,6 +499,71 @@ export type StashComment = {
   updatedAt: string
 }
 
+// 游记：一次旅行 = 攻略区（Syzygy 写的计划停留点，GCJ-02）+ 路线区（串串的打卡，离线补传）。
+// 对比（按计划 / 改道 / 新发现 / 跳过）是读时计算，规则在 hamster-mcp/travel_contract.ts。
+export type TravelTripStatus = 'planning' | 'ongoing' | 'done'
+
+export type TravelTrip = {
+  id: string
+  userId: string
+  title: string
+  destination: string | null
+  startDate: string | null
+  endDate: string | null
+  status: TravelTripStatus
+  summary: string | null
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type TravelPlanStop = {
+  id: string
+  userId: string
+  tripId: string
+  dayIndex: number
+  sortOrder: number
+  plannedTime: string | null
+  name: string
+  address: string | null
+  lng: number | null
+  lat: number | null
+  reason: string | null
+  notes: string | null
+  navHint: string | null
+  writtenBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type TravelCheckin = {
+  id: string
+  userId: string
+  tripId: string
+  clientId: string
+  checkedAt: string
+  wgsLng: number | null
+  wgsLat: number | null
+  accuracyM: number | null
+  gcjLng: number | null
+  gcjLat: number | null
+  placeName: string | null
+  note: string | null
+  mood: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type TravelCheckinComment = {
+  id: string
+  userId: string
+  checkinId: string
+  author: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type TimelineRecorder = 'chuanchuan' | 'syzygy'
 export type TimelineSource = string
 

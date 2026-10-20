@@ -73,6 +73,8 @@ import EventThreadPage from './pages/EventThreadPage'
 import DiaryPage from './pages/DiaryPage'
 import DiaryDayPage from './pages/DiaryDayPage'
 import StashPage from './pages/StashPage'
+import TravelPage from './pages/TravelPage'
+import TravelTripPage from './pages/TravelTripPage'
 import TodoPage from './pages/TodoPage'
 import HamsterConsolePage from './pages/HamsterConsolePage'
 import AgentCouncilPage from './pages/AgentCouncilPage'
@@ -2337,6 +2339,22 @@ const App = () => {
           element={
             <RequireAuth ready={authReady} user={user}>
               <StashPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/travel"
+          element={
+            <RequireAuth ready={authReady} user={user}>
+              <TravelPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/travel/:tripId"
+          element={
+            <RequireAuth ready={authReady} user={user}>
+              <TravelTripPage />
             </RequireAuth>
           }
         />
