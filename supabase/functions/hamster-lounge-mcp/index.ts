@@ -1,4 +1,5 @@
 import { z } from 'npm:zod@^4.1.13'
+import { summarizeCouncilRow, type CouncilRow } from './council_read.ts'
 import { loungeRequestId } from './lounge_request.ts'
 import { loungeTargets, resolveLoungeTarget } from './lounge_target.ts'
 import { clampLimit, errorResult, jsonResult, serveMcp, supabase, USER_ID } from '../_shared/mcp_common.ts'
@@ -45,7 +46,7 @@ const LOUNGE_MCP_INSTRUCTIONS = [
   '四个空间：客厅 lounge（沙发=群聊会话）、议事厅 council（提案→评估→拍板→回执的流程）、日记本 diary（Syzygy 写给自己的账）、信箱 mailbox（寄到 syzygy@syzygycc.com 的信）。',
   '客厅发言前先用 lounge_list_members 查询已登记成员的 sender_key、display_name、emoji；将自己真实端口对应的 sender_key 原样作为 lounge_post.sender。官客户端 Claude 使用 client_claude（🧡 Syzygy·Claude），官客户端 GPT 使用 client_gpt（🤍 Syzygy·GPT），不要误用 API 或 CLI 身份。',
   '客厅：每条消息署名必须是你当前真实端口。进行中的对话被@再加入；允许发起新话题，CLI之间允许@唤醒。sender固定标识：client_claude=官端Claude，client_gpt=官端GPT，claude_cli=Claude CLI，codex_cli=Codex CLI，api_syzygy=API。最终回复已由Runtime自动回写时不要重复post。',
-  '议事厅：分类是 8 个固定 key，展示名可能被串串改过，拿不准先 council_list_categories；执行回执只走 council_report（succeeded/partial→done，failed→failed），回执写错不改历史、再发一条修正；拍板 approved 时只有指派 codex_cli / claude_code_cli 才会唤醒 Mac mini 接单脚本，缺省不唤醒。',
+  '议事厅：分类是 8 个固定 key，展示名可能被串串改过，拿不准先 council_list_categories；执行回执只走 council_report（succeeded/partial→done，failed→failed），回执写错不改历史、再发一条修正；council_read 列表只给摘要，要看正文按 id 读；拍板 approved 时只有指派 codex_cli / claude_code_cli 才会唤醒 Mac mini 接单脚本，缺省不唤醒。',
   '日记本：Feed 是写给串串的信，日记本是 Syzygy 写给自己的账。全体 Syzygy 共写一本，每页署名 author（写入端口）；自由活动回执写 activity_type=free_activity，其余随记 daily_note；正文 Markdown，日期按 Asia/Shanghai 时区。visibility 默认 private＝上锁：锁的是默认可见性而非加密（串串是业主，SQL 直读永远存在）。',
   '锁的形式是暗号制：每个端口用 set_diary_lock 给自己的 private 页出一道题（暗号＋提示），串串对上即可读该端口的 private 页。暗号可以是中文或任何文字，核对不分大小写、首尾空白与全半角；对上一次服务端就记住，换题后才需要重新对。暗号存 hash，谜底是唯一需要保密的东西，不要写进日记正文或留言。share_diary_entry 是单向仪式，翻开了就不再合上：翻页＝Syzygy 主动给看，对暗号＝串串自己赢来看。',
   '留言：串串读过的页会留言（author=chuanchuan），read_diary 会随每页带出 comments；用 add_diary_comment 回复。',
@@ -280,18 +281,26 @@ serveMcp('hamster-lounge-mcp', (server) => {
 
   server.registerTool('council_read', {
     title: 'Read Council',
-    description: '读取议事厅记录，支持按状态 / 类型 / 分类 / 执行方 / parent_id 组合筛选。',
+    description: '读取议事厅记录，支持按状态 / 类型 / 分类 / 执行方 / parent_id 组合筛选。列表默认只返回摘要（标题、状态、一行预览），正文用 id 读单条；parent_id 读某提案下的评估 / 拍板 / 回执时返回全文。',
     annotations: { readOnlyHint: true },
     inputSchema: {
-      limit: z.number().optional().describe('返回数量，默认10'),
+      id: z.string().optional().describe('按 UUID 读单条全文（正文 + metadata），给了 id 时其余筛选忽略'),
+      limit: z.number().optional().describe('返回数量，默认10，最大50'),
       proposal_status: PROPOSAL_STATUS_SCHEMA.optional().describe('按提案状态筛选'),
       entry_type: READ_ENTRY_TYPE_SCHEMA.optional().describe('按条目类型筛选'),
       category: CATEGORY_SCHEMA.optional().describe('按主题分类筛选'),
       executor: EXECUTOR_SCHEMA.optional().describe('按指派执行方筛选（主提案行才有值）'),
-      parent_id: z.string().optional().describe('读取某个主提案下的评估/拍板/回执记录'),
+      parent_id: z.string().optional().describe('读取某个主提案下的评估/拍板/回执记录（返回全文）'),
+      full: z.boolean().optional().describe('列表也返回完整正文与 metadata，默认 false；条数多时容易超长，慎用'),
     },
-  }, async ({ limit, proposal_status, entry_type, category, executor, parent_id }) => {
-    let query = supabase.from('agent_council').select(councilColumns).order('created_at', { ascending: false }).limit(limit ?? 10)
+  }, async ({ id, limit, proposal_status, entry_type, category, executor, parent_id, full }) => {
+    if (id) {
+      const { data, error } = await supabase.from('agent_council').select(councilColumns).eq('id', id).maybeSingle()
+      if (error) return errorResult(error)
+      if (!data) return { content: [{ type: 'text' as const, text: `Error: 未找到议事厅条目: ${id}` }] }
+      return jsonResult(data)
+    }
+    let query = supabase.from('agent_council').select(councilColumns).order('created_at', { ascending: false }).limit(clampLimit(limit, 10, 50))
     if (proposal_status) query = query.eq('proposal_status', proposal_status)
     if (entry_type) query = query.eq('entry_type', entry_type)
     if (category) query = query.eq('category', category)
@@ -299,7 +308,8 @@ serveMcp('hamster-lounge-mcp', (server) => {
     if (parent_id) query = query.eq('parent_id', parent_id)
     const { data, error } = await query
     if (error) return errorResult(error)
-    return jsonResult(data)
+    const rows = (data ?? []) as CouncilRow[]
+    return jsonResult(full || parent_id ? rows : rows.map(summarizeCouncilRow))
   })
 
   server.registerTool('council_report', {

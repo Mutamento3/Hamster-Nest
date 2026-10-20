@@ -7,6 +7,7 @@ import {loungeRequestId} from '../supabase/functions/hamster-lounge-mcp/lounge_r
 import * as targets from '../supabase/functions/hamster-lounge-mcp/lounge_target.ts';
 import * as diary from '../supabase/functions/hamster-lounge-mcp/diary_contract.ts';
 import * as mailbox from '../supabase/functions/_shared/mailbox.ts';
+import * as councilRead from '../supabase/functions/hamster-lounge-mcp/council_read.ts';
 
 // Execute the actual registered handlers with database and transport boundaries replaced.
 const source=readFileSync(new URL('../supabase/functions/hamster-lounge-mcp/index.ts',import.meta.url),'utf8');
@@ -31,7 +32,7 @@ function harness() {
   };
   const chain=new Proxy(function(){},{get:()=>chain,apply:()=>chain});
   const modules={
-    'npm:zod@^4.1.13':{z:chain},'./lounge_request.ts':{loungeRequestId},'./lounge_target.ts':targets,'./diary_contract.ts':diary,'../_shared/mailbox.ts':mailbox,
+    'npm:zod@^4.1.13':{z:chain},'./lounge_request.ts':{loungeRequestId},'./council_read.ts':councilRead,'./lounge_target.ts':targets,'./diary_contract.ts':diary,'../_shared/mailbox.ts':mailbox,
     '../_shared/mcp_common.ts':{USER_ID:'owner',supabase:client,clampLimit:x=>x,jsonResult:x=>x,errorResult:e=>({error:e?.message}),serveMcp(_name,register){register({registerTool(name,_schema,handler){tools.set(name,handler);}});}},
   };
   runInNewContext(compiled,{exports:{},require(name){if(!(name in modules))throw new Error(name);return modules[name];}});
