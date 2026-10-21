@@ -59,18 +59,6 @@ const shanghaiDateString = (date = new Date()) => {
 
 const shanghaiMonthString = (date = new Date()) => shanghaiDateString(date).slice(0, 7)
 
-const addDays = (dateString: string, days: number) => {
-  const [year, month, day] = dateString.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day + days))
-  return date.toISOString().slice(0, 10)
-}
-
-const shanghaiDayRange = (date = new Date()) => {
-  const today = shanghaiDateString(date)
-  const tomorrow = addDays(today, 1)
-  return { start: `${today}T00:00:00+08:00`, end: `${tomorrow}T00:00:00+08:00` }
-}
-
 const dateValue = (value: string | null | undefined) => value ? new Date(value).getTime() : 0
 
 const sortFeedItems = <T extends { pinned?: boolean | null; priority?: string | null; visible_from?: string | null; created_at?: string | null }>(items: T[]) =>
@@ -305,30 +293,6 @@ serveMcp('hamster-mcp', (server) => {
   })
 
 
-  server.registerTool('get_today_syzygy_feed', {
-    title: 'Get Today Syzygy Feed',
-    description: '读取今天的 Syzygy Feed 摘要列表。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      limit: z.number().optional().describe('返回数量上限，默认5，最大10'),
-      include_read: z.boolean().optional().describe('是否包含已读内容，默认 true；false 时只返回 unread'),
-      priority: z.enum(['high', 'urgent']).optional().describe('可选优先级筛选：high / urgent'),
-    },
-  }, async ({ limit, include_read, priority }) => {
-    try {
-      const safeLimit = clampLimit(limit, 5, 10)
-      const { start, end } = shanghaiDayRange()
-      const statuses = include_read === false ? ['unread'] : DEFAULT_FEED_STATUSES
-      let query = supabase.from('agent_feed_items').select(FEED_LIST_COLUMNS).eq('user_id', USER_ID).in('status', statuses).lte('visible_from', new Date().toISOString()).gte('visible_from', start).lt('visible_from', end).order('pinned', { ascending: false }).order('visible_from', { ascending: false }).order('created_at', { ascending: false }).limit(Math.max(safeLimit * 4, 20))
-      if (priority) query = query.eq('priority', priority)
-      const { data, error } = await query
-      if (error) return errorResult(error)
-      return feedListResult(data as Record<string, unknown>[] | null, safeLimit)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
   server.registerTool('get_recent_syzygy_feed', {
     title: 'Get Recent Syzygy Feed',
     description: '读取最近 N 天的 Syzygy Feed 摘要列表。',
@@ -395,27 +359,6 @@ serveMcp('hamster-mcp', (server) => {
       const item = data?.[0] ?? null
       if (!item) return { content: [{ type: 'text' as const, text: `Error: monthly_overview not found for ${targetMonth}` }] }
       return jsonResult(item)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
-  server.registerTool('get_syzygy_feed_detail', {
-    title: 'Get Syzygy Feed Detail',
-    description: '按 id 读取单条 Syzygy Feed 的完整内容。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      id: z.string().describe('Feed item UUID'),
-      include_archived: z.boolean().optional().describe('显式允许读取 archived / expired，默认 false'),
-    },
-  }, async ({ id, include_archived }) => {
-    try {
-      let query = supabase.from('agent_feed_items').select(FEED_DETAIL_COLUMNS).eq('user_id', USER_ID).eq('id', id).lte('visible_from', new Date().toISOString())
-      if (!include_archived) query = query.in('status', DEFAULT_FEED_STATUSES)
-      const { data, error } = await query.maybeSingle()
-      if (error) return errorResult(error)
-      if (!data) return { content: [{ type: 'text' as const, text: `Error: feed item not found or not visible: ${id}` }] }
-      return jsonResult(data)
     } catch (err) {
       return errorResult(err)
     }

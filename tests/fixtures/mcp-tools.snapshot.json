@@ -63,8 +63,6 @@
     "get_monthly_overview",
     "get_recent_syzygy_feed",
     "get_syzygy_feed_by_type",
-    "get_syzygy_feed_detail",
-    "get_today_syzygy_feed",
     "list_event_threads",
     "list_memo_tags",
     "list_memos",
