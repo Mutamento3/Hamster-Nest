@@ -59,11 +59,10 @@
     "cli_set_self_alarm",
     "complete_todo",
     "delete_memo",
+    "delete_trip_stop",
     "get_monthly_overview",
     "get_recent_syzygy_feed",
     "get_syzygy_feed_by_type",
-    "get_syzygy_feed_detail",
-    "get_today_syzygy_feed",
     "list_event_threads",
     "list_memo_tags",
     "list_memos",
@@ -80,6 +79,7 @@
     "update_memo",
     "update_timeline",
     "update_trip",
+    "update_trip_stop",
     "write_trip_plan"
   ],
   "hamster-print-mcp": [

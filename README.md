@@ -209,7 +209,7 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 10-14本地候选新增设备同步只读工具；部署状态另验。
 
-当前源码工具总数：25 + 17 + 18 + 19 + 7 + 4 = **90**。09-29 自由活动候选新增 `cli_set_self_alarm`；10-11 信箱新增 `mailbox_list` / `mailbox_read`；10-13 时间轴新增 `update_timeline`；10-20 游记新增 `list_trips` / `read_trip` / `add_trip` / `update_trip` / `write_trip_plan` / `add_travel_comment`；此前线上核验为 85 项，部署后需重新核验。
+当前源码工具总数：25 + 17 + 18 + 19 + 7 + 4 = **90**。09-29 自由活动候选新增 `cli_set_self_alarm`；10-11 信箱新增 `mailbox_list` / `mailbox_read`；10-13 时间轴新增 `update_timeline`；10-20 游记新增 `list_trips` / `read_trip` / `add_trip` / `update_trip` / `write_trip_plan` / `add_travel_comment`；10-21 游记新增单站编辑 `update_trip_stop` / `delete_trip_stop`；同日下线聊天端少用的 `get_today_syzygy_feed` / `get_syzygy_feed_detail`（Feed 内容照常在 PWA 看）；此前线上核验为 85 项，部署后需重新核验。
 
 本地 `npm run mcp:inventory -- --json` 的 `toolNamesByServer` 给出「server → 排序后的工具名列表」，包含 reading 工厂展开后的 8 个工具。扫描只解析 TypeScript 源码，不加载或执行 Deno 模块；未知动态注册、重复工具名或扫描失败会以非零状态退出。静态 schema 体积仍是估算，精确体积与部署状态用 `--live` 核对。
 
@@ -237,11 +237,9 @@ npm test
 | `read_health_steps` | 实时核验独立AI授权，读取与App同版本的七天HealthKit汇总；不触发采集 |
 | `read_device_snapshot` | 读取已同步设备状态，各类独立时间与来源；不触发手机采集 |
 | `cli_set_self_alarm` | 根据本轮 CLI 任务身份给自己预约当天一次闹钟，冲突返回可用时刻 |
-| `get_today_syzygy_feed` | 读取今日 Syzygy Feed 摘要（按可见时间过滤，可筛优先级 / 已读状态） |
 | `get_recent_syzygy_feed` | 读取近 N 天 Feed 摘要，支持类型与状态筛选 |
 | `get_syzygy_feed_by_type` | 按类型取 Feed（晨间分享 / 阅读辅助 / Syzygy 随笔…） |
 | `get_monthly_overview` | 取某月的月度概览内容（默认当月） |
-| `get_syzygy_feed_detail` | 按 UUID 读取单条 Feed 全文（尊重可见性与归档状态） |
 | `search_timeline` | 按关键词搜索时间轴，按日期倒序 |
 | `recent_timeline` | 取最近的时间轴条目（默认 10 条） |
 | `add_timeline` | 新增时间轴条目（日期 / 摘要 / 记录者 / 来源） |
@@ -265,6 +263,8 @@ npm test
 | `add_trip` | 新建一次旅行（标题 / 目的地 / 起止日期 / 状态） |
 | `update_trip` | 改旅行信息或状态，或写复盘（summary 整体替换） |
 | `write_trip_plan` | 写攻略：一次写入多个计划停留点（GCJ-02 坐标、为什么去 / 注意事项 / 导航提示），append 或 replace（需 confirm） |
+| `update_trip_stop` | 改攻略里的单个停留点：只传要改的字段，可选字段传 null 清除 |
+| `delete_trip_stop` | 物理删除单个攻略点（需 confirm=true 二次确认） |
 | `add_travel_comment` | 在串串的打卡点下留言 / 回复 |
 
 </details>

@@ -42,7 +42,7 @@ const HAMSTER_MCP_INSTRUCTIONS = [
   '事件集：记时效期较长、会频繁更新的事项。一件事开一条事件线（thread），进度按日期追加条目（entry），结束后结项归档不删。开机只用 list_event_threads 读进行中事件线的「当前状态」行，对话碰到某件事再 read_event_thread 读条目；已结束的默认不读。同一件事可同时进时间轴（意义与心情）和事件集（进度）。追加条目时顺手用 current_status 刷新状态行。',
   '通用约定：日期按 Asia/Shanghai 时区；source / recorder / created_by 等枚举表示写入端身份，默认 claude / syzygy；Feed 读取默认只含 unread/read，不返回 archived/expired，摘要列表不含全文。',
   '写入习惯：timeline / memo 写入前先用 search_timeline / list_memos 查重，同一事实优先 update_memo 维护而非重复新增；时间轴写错或要补细节用 update_timeline 改原条，不另补一条；带「进行中」标签的 memo 是活跃叙事线，正文以「当前状态」段收尾。时间轴写入标准：三个月后读起来会心动的事。',
-  '游记 travel_*：一次旅行（trip）= 攻略区（Syzygy 写的计划停留点，GCJ-02 坐标，可用高德 MCP 查 POI 与路线）+ 路线区（串串在 PWA 按下的打卡，离线补传，时间以按下时刻为准）。read_trip 会把每个打卡标成按计划 / 改道 / 新发现，把计划点标成到过 / 跳过 / 还没到；偏离不算扣分，新发现是惊喜。攻略要路痴友好：每个点写清为什么去、注意事项和导航提示（从上一站怎么过来、认哪个标志物）。旅行结束后可对照两区写复盘（update_trip.summary）。',
+  '游记 travel_*：一次旅行（trip）= 攻略区（Syzygy 写的计划停留点，GCJ-02 坐标，可用高德 MCP 查 POI 与路线）+ 路线区（串串在 PWA 按下的打卡，离线补传，时间以按下时刻为准）。read_trip 会把每个打卡标成按计划 / 改道 / 新发现，把计划点标成到过 / 跳过 / 还没到；偏离不算扣分，新发现是惊喜。攻略要路痴友好：每个点写清为什么去、注意事项和导航提示（从上一站怎么过来、认哪个标志物）。改单个攻略点用 update_trip_stop / delete_trip_stop，整份重排才用 write_trip_plan(replace)。旅行结束后可对照两区写复盘（update_trip.summary）。',
   '删除是物理删除，需显式 confirm=true 二次确认。',
 ].join('\n')
 
@@ -58,18 +58,6 @@ const shanghaiDateString = (date = new Date()) => {
 }
 
 const shanghaiMonthString = (date = new Date()) => shanghaiDateString(date).slice(0, 7)
-
-const addDays = (dateString: string, days: number) => {
-  const [year, month, day] = dateString.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day + days))
-  return date.toISOString().slice(0, 10)
-}
-
-const shanghaiDayRange = (date = new Date()) => {
-  const today = shanghaiDateString(date)
-  const tomorrow = addDays(today, 1)
-  return { start: `${today}T00:00:00+08:00`, end: `${tomorrow}T00:00:00+08:00` }
-}
 
 const dateValue = (value: string | null | undefined) => value ? new Date(value).getTime() : 0
 
@@ -305,30 +293,6 @@ serveMcp('hamster-mcp', (server) => {
   })
 
 
-  server.registerTool('get_today_syzygy_feed', {
-    title: 'Get Today Syzygy Feed',
-    description: '读取今天的 Syzygy Feed 摘要列表。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      limit: z.number().optional().describe('返回数量上限，默认5，最大10'),
-      include_read: z.boolean().optional().describe('是否包含已读内容，默认 true；false 时只返回 unread'),
-      priority: z.enum(['high', 'urgent']).optional().describe('可选优先级筛选：high / urgent'),
-    },
-  }, async ({ limit, include_read, priority }) => {
-    try {
-      const safeLimit = clampLimit(limit, 5, 10)
-      const { start, end } = shanghaiDayRange()
-      const statuses = include_read === false ? ['unread'] : DEFAULT_FEED_STATUSES
-      let query = supabase.from('agent_feed_items').select(FEED_LIST_COLUMNS).eq('user_id', USER_ID).in('status', statuses).lte('visible_from', new Date().toISOString()).gte('visible_from', start).lt('visible_from', end).order('pinned', { ascending: false }).order('visible_from', { ascending: false }).order('created_at', { ascending: false }).limit(Math.max(safeLimit * 4, 20))
-      if (priority) query = query.eq('priority', priority)
-      const { data, error } = await query
-      if (error) return errorResult(error)
-      return feedListResult(data as Record<string, unknown>[] | null, safeLimit)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
   server.registerTool('get_recent_syzygy_feed', {
     title: 'Get Recent Syzygy Feed',
     description: '读取最近 N 天的 Syzygy Feed 摘要列表。',
@@ -395,27 +359,6 @@ serveMcp('hamster-mcp', (server) => {
       const item = data?.[0] ?? null
       if (!item) return { content: [{ type: 'text' as const, text: `Error: monthly_overview not found for ${targetMonth}` }] }
       return jsonResult(item)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
-  server.registerTool('get_syzygy_feed_detail', {
-    title: 'Get Syzygy Feed Detail',
-    description: '按 id 读取单条 Syzygy Feed 的完整内容。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      id: z.string().describe('Feed item UUID'),
-      include_archived: z.boolean().optional().describe('显式允许读取 archived / expired，默认 false'),
-    },
-  }, async ({ id, include_archived }) => {
-    try {
-      let query = supabase.from('agent_feed_items').select(FEED_DETAIL_COLUMNS).eq('user_id', USER_ID).eq('id', id).lte('visible_from', new Date().toISOString())
-      if (!include_archived) query = query.in('status', DEFAULT_FEED_STATUSES)
-      const { data, error } = await query.maybeSingle()
-      if (error) return errorResult(error)
-      if (!data) return { content: [{ type: 'text' as const, text: `Error: feed item not found or not visible: ${id}` }] }
-      return jsonResult(data)
     } catch (err) {
       return errorResult(err)
     }
@@ -1136,6 +1079,67 @@ serveMcp('hamster-mcp', (server) => {
         }
       }
       return { content: [{ type: 'text' as const, text: `已${replace ? '重写' : '追加'}「${trip.title}」攻略 ${data?.length ?? 0} 个点: ${JSON.stringify(data)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('update_trip_stop', {
+    title: 'Update Trip Stop',
+    description: '改攻略里的单个计划停留点（stop id 用 read_trip 查）：只传要改的字段，其余原样保留；可选字段传 null 清除，经纬度要成对改。改第几天时 sort_order 不变，需要挪顺序就一起传 sort_order（相邻站之间留了 10 的空隙）。',
+    inputSchema: {
+      stop_id: z.string().describe('攻略点 UUID'),
+      day_index: z.number().int().optional().describe('第几天，出发当天为 1'),
+      sort_order: z.number().int().optional().describe('排序值，越小越靠前（read_trip 可看到现有值）'),
+      planned_time: z.string().nullable().optional().describe('大致时间，传 null 清除'),
+      name: z.string().optional().describe('地点名'),
+      address: z.string().nullable().optional().describe('地址，传 null 清除'),
+      lng: z.number().nullable().optional().describe('经度，GCJ-02，与 lat 成对；传 null 清除坐标'),
+      lat: z.number().nullable().optional().describe('纬度，GCJ-02，与 lng 成对；传 null 清除坐标'),
+      reason: z.string().nullable().optional().describe('为什么去（整体替换），传 null 清除'),
+      notes: z.string().nullable().optional().describe('注意事项（整体替换），传 null 清除'),
+      nav_hint: z.string().nullable().optional().describe('导航提示（整体替换），传 null 清除'),
+    },
+  }, async ({ stop_id, ...changes }) => {
+    try {
+      if (Object.values(changes).every((value) => value === undefined)) {
+        return { content: [{ type: 'text' as const, text: 'Error: 至少要改一个字段' }] }
+      }
+      if ((changes.lng === undefined) !== (changes.lat === undefined)) {
+        return { content: [{ type: 'text' as const, text: 'Error: 经纬度要成对改' }] }
+      }
+      const { data: existing, error: existingError } = await supabase.from('travel_plan_stops').select(TRAVEL_STOP_READ_COLUMNS).eq('user_id', USER_ID).eq('id', stop_id).maybeSingle()
+      if (existingError) return errorResult(existingError)
+      if (!existing) return { content: [{ type: 'text' as const, text: `Error: 未找到攻略点: ${stop_id}（用 read_trip 核对 id）` }] }
+      const merged = { ...(existing as TravelStopRow) }
+      for (const [key, value] of Object.entries(changes)) {
+        if (value !== undefined) (merged as Record<string, unknown>)[key] = value
+      }
+      const normalized = normalizeTravelStopInput(merged)
+      if (!normalized.ok) return { content: [{ type: 'text' as const, text: `Error: ${normalized.error}` }] }
+      const { data, error } = await supabase.from('travel_plan_stops').update(normalized.value).eq('user_id', USER_ID).eq('id', stop_id).select(TRAVEL_STOP_READ_COLUMNS).single()
+      if (error) return errorResult(error)
+      return { content: [{ type: 'text' as const, text: `已更新攻略点: ${JSON.stringify(data)}` }] }
+    } catch (err) {
+      return errorResult(err)
+    }
+  })
+
+  server.registerTool('delete_trip_stop', {
+    title: 'Delete Trip Stop',
+    description: '物理删除攻略里的单个计划停留点，不可恢复；需显式传 confirm=true。打卡不受影响，原先匹配到这一站的打卡读时会重新匹配（可能变成新发现）。',
+    inputSchema: {
+      stop_id: z.string().describe('攻略点 UUID'),
+      confirm: z.boolean().describe('二次确认：必须显式传 true 才执行删除'),
+    },
+    annotations: { destructiveHint: true },
+  }, async ({ stop_id, confirm }) => {
+    try {
+      if (confirm !== true) return { content: [{ type: 'text' as const, text: 'Error: 删除需显式传 confirm=true' }] }
+      const { data, error } = await supabase.from('travel_plan_stops').delete().eq('user_id', USER_ID).eq('id', stop_id).select('id, day_index, name')
+      if (error) return errorResult(error)
+      if (!data || data.length === 0) return { content: [{ type: 'text' as const, text: `Error: 未找到攻略点: ${stop_id}（用 read_trip 核对 id）` }] }
+      return { content: [{ type: 'text' as const, text: `已删除攻略点: ${JSON.stringify(data[0])}` }] }
     } catch (err) {
       return errorResult(err)
     }
