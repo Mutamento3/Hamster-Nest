@@ -17,11 +17,6 @@ import {
   type TravelTripStatus,
 } from './travel_contract.ts'
 
-const FEED_LIST_COLUMNS = 'id, type, title, summary, priority, status, source, created_by, visible_from, created_at, pinned, metadata'
-const FEED_DETAIL_COLUMNS = 'id, type, title, summary, content, content_format, priority, status, source, created_by, visible_from, expires_at, related_table, related_id, metadata, created_at, updated_at'
-const DEFAULT_FEED_STATUSES = ['unread', 'read']
-const FEED_PRIORITY_RANK: Record<string, number> = { low: 1, normal: 2, high: 3, urgent: 4 }
-const FEED_TYPE_SCHEMA = z.enum(['morning_share', 'reading_assist', 'daily_card', 'system_notice', 'syzygy_note', 'weekly_card', 'reminder_card', 'print_card', 'dev_log', 'monthly_overview', 'other'])
 const TIMELINE_SOURCE_SCHEMA = z.enum(['claude', 'gpt', 'user', 'gemini', 'wechat', 'codex_cli', 'claude_code_cli', 'api'])
 const MEMO_SOURCE_SCHEMA = TIMELINE_SOURCE_SCHEMA
 const MEMO_COLUMNS = 'id, content, source, is_pinned, created_at, updated_at'
@@ -37,10 +32,10 @@ const EVENT_ENTRY_SOURCE_SCHEMA = z.enum(['claude', 'gpt', 'gemini', 'user', 'co
 
 // 服务器级使用说明：跨工具的共性约定统一放这里，工具描述只写"做什么"。
 const HAMSTER_MCP_INSTRUCTIONS = [
-  '仓鼠窝日常域：时间轴（长期事件记忆）、待办、Syzygy Feed（系统下发内容流）、备忘录 memo（中期活事实）、事件集 event_threads / event_entries（纪事本末体的线程记录层）。',
+  '仓鼠窝日常域：时间轴（长期事件记忆）、待办、备忘录 memo（中期活事实）、事件集 event_threads / event_entries（纪事本末体的线程记录层）。',
   '裁决口诀：过去进时间轴，现在进 Memo，永远进档案，将来进 To do，线程进事件集；自己说的进 Wiki，外面看到想留的进囤粮处；要许可的去议事厅。',
   '事件集：记时效期较长、会频繁更新的事项。一件事开一条事件线（thread），进度按日期追加条目（entry），结束后结项归档不删。开机只用 list_event_threads 读进行中事件线的「当前状态」行，对话碰到某件事再 read_event_thread 读条目；已结束的默认不读。同一件事可同时进时间轴（意义与心情）和事件集（进度）。追加条目时顺手用 current_status 刷新状态行。',
-  '通用约定：日期按 Asia/Shanghai 时区；source / recorder / created_by 等枚举表示写入端身份，默认 claude / syzygy；Feed 读取默认只含 unread/read，不返回 archived/expired，摘要列表不含全文。',
+  '通用约定：日期按 Asia/Shanghai 时区；source / recorder / created_by 等枚举表示写入端身份，默认 claude / syzygy。',
   '写入习惯：timeline / memo 写入前先用 search_timeline / list_memos 查重，同一事实优先 update_memo 维护而非重复新增；时间轴写错或要补细节用 update_timeline 改原条，不另补一条；带「进行中」标签的 memo 是活跃叙事线，正文以「当前状态」段收尾。时间轴写入标准：三个月后读起来会心动的事。',
   '游记 travel_*：一次旅行（trip）= 攻略区（Syzygy 写的计划停留点，GCJ-02 坐标，可用高德 MCP 查 POI 与路线）+ 路线区（串串在 PWA 按下的打卡，离线补传，时间以按下时刻为准）。read_trip 会把每个打卡标成按计划 / 改道 / 新发现，把计划点标成到过 / 跳过 / 还没到；偏离不算扣分，新发现是惊喜。攻略要路痴友好：每个点写清为什么去、注意事项和导航提示（从上一站怎么过来、认哪个标志物）。改单个攻略点用 update_trip_stop / delete_trip_stop，整份重排才用 write_trip_plan(replace)。旅行结束后可对照两区写复盘（update_trip.summary）。',
   '删除是物理删除，需显式 confirm=true 二次确认。',
@@ -56,49 +51,6 @@ const shanghaiDateString = (date = new Date()) => {
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
   return `${value('year')}-${value('month')}-${value('day')}`
 }
-
-const shanghaiMonthString = (date = new Date()) => shanghaiDateString(date).slice(0, 7)
-
-const dateValue = (value: string | null | undefined) => value ? new Date(value).getTime() : 0
-
-const sortFeedItems = <T extends { pinned?: boolean | null; priority?: string | null; visible_from?: string | null; created_at?: string | null }>(items: T[]) =>
-  [...items].sort((a, b) => {
-    if (Boolean(a.pinned) !== Boolean(b.pinned)) return b.pinned ? 1 : -1
-    const priorityDiff = (FEED_PRIORITY_RANK[b.priority ?? 'normal'] ?? 0) - (FEED_PRIORITY_RANK[a.priority ?? 'normal'] ?? 0)
-    if (priorityDiff !== 0) return priorityDiff
-    const visibleDiff = dateValue(b.visible_from) - dateValue(a.visible_from)
-    if (visibleDiff !== 0) return visibleDiff
-    return dateValue(b.created_at) - dateValue(a.created_at)
-  })
-
-const compactMetadata = (metadata: unknown) => {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return metadata ?? {}
-  const compact: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(metadata as Record<string, unknown>).slice(0, 8)) {
-    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) compact[key] = value
-    else if (Array.isArray(value)) compact[key] = { type: 'array', length: value.length }
-    else compact[key] = { type: 'object' }
-  }
-  return compact
-}
-
-const compactFeedItem = (item: Record<string, unknown>) => ({
-  id: item.id,
-  type: item.type,
-  title: item.title,
-  summary: item.summary,
-  priority: item.priority,
-  status: item.status,
-  source: item.source,
-  created_by: item.created_by,
-  visible_from: item.visible_from,
-  created_at: item.created_at,
-  pinned: item.pinned,
-  metadata: compactMetadata(item.metadata),
-})
-
-const feedListResult = (rows: Record<string, unknown>[] | null, limit: number) =>
-  jsonResult(sortFeedItems(rows ?? []).slice(0, limit).map(compactFeedItem))
 
 type MemoTagRef = { id: string; name: string }
 
@@ -292,77 +244,6 @@ serveMcp('hamster-mcp', (server) => {
     return error ? errorResult(error) : jsonResult(data)
   })
 
-
-  server.registerTool('get_recent_syzygy_feed', {
-    title: 'Get Recent Syzygy Feed',
-    description: '读取最近 N 天的 Syzygy Feed 摘要列表。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      limit: z.number().optional().describe('返回数量上限，默认5，最大20'),
-      type: FEED_TYPE_SCHEMA.optional().describe('Feed 类型筛选'),
-      status: z.enum(['unread', 'read', 'archived', 'expired']).optional().describe('状态筛选；不传时默认 unread/read'),
-      days: z.number().optional().describe('回看天数，默认7'),
-    },
-  }, async ({ limit, type, status, days }) => {
-    try {
-      const safeLimit = clampLimit(limit, 5, 20)
-      const safeDays = clampLimit(days, 7, 90)
-      const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString()
-      let query = supabase.from('agent_feed_items').select(FEED_LIST_COLUMNS).eq('user_id', USER_ID).lte('visible_from', new Date().toISOString()).gte('visible_from', since).order('pinned', { ascending: false }).order('visible_from', { ascending: false }).order('created_at', { ascending: false }).limit(Math.max(safeLimit * 4, 40))
-      query = status ? query.eq('status', status) : query.in('status', DEFAULT_FEED_STATUSES)
-      if (type) query = query.eq('type', type)
-      const { data, error } = await query
-      if (error) return errorResult(error)
-      return feedListResult(data as Record<string, unknown>[] | null, safeLimit)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
-  server.registerTool('get_syzygy_feed_by_type', {
-    title: 'Get Syzygy Feed By Type',
-    description: '按类型读取 Syzygy Feed 摘要列表。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      type: FEED_TYPE_SCHEMA.describe('Feed 类型'),
-      limit: z.number().optional().describe('返回数量上限，默认5，最大10'),
-      days: z.number().optional().describe('回看天数，默认14'),
-    },
-  }, async ({ type, limit, days }) => {
-    try {
-      const safeLimit = clampLimit(limit, 5, 10)
-      const safeDays = clampLimit(days, 14, 90)
-      const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString()
-      const { data, error } = await supabase.from('agent_feed_items').select(FEED_LIST_COLUMNS).eq('user_id', USER_ID).eq('type', type).in('status', DEFAULT_FEED_STATUSES).lte('visible_from', new Date().toISOString()).gte('visible_from', since).order('pinned', { ascending: false }).order('visible_from', { ascending: false }).order('created_at', { ascending: false }).limit(Math.max(safeLimit * 4, 20))
-      if (error) return errorResult(error)
-      return feedListResult(data as Record<string, unknown>[] | null, safeLimit)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
-
-  server.registerTool('get_monthly_overview', {
-    title: 'Get Monthly Overview',
-    description: '读取指定月份的月度概览全文，默认当前月的 active 版本。',
-    annotations: { readOnlyHint: true },
-    inputSchema: {
-      month: z.string().optional().describe('月份 YYYY-MM；默认当前上海月份'),
-      include_archived: z.boolean().optional().describe('是否允许读取 archived/expired 的 Feed 记录，默认 false'),
-    },
-  }, async ({ month, include_archived }) => {
-    try {
-      const targetMonth = month ?? shanghaiMonthString()
-      let query = supabase.from('agent_feed_items').select(FEED_DETAIL_COLUMNS).eq('user_id', USER_ID).eq('type', 'monthly_overview').eq('metadata->>month', targetMonth).lte('visible_from', new Date().toISOString()).order('updated_at', { ascending: false }).limit(5)
-      if (!include_archived) query = query.in('status', DEFAULT_FEED_STATUSES).eq('metadata->>status', 'active')
-      const { data, error } = await query
-      if (error) return errorResult(error)
-      const item = data?.[0] ?? null
-      if (!item) return { content: [{ type: 'text' as const, text: `Error: monthly_overview not found for ${targetMonth}` }] }
-      return jsonResult(item)
-    } catch (err) {
-      return errorResult(err)
-    }
-  })
 
   server.registerTool('search_timeline', {
     title: 'Search Timeline',

@@ -10,7 +10,7 @@
 
 [![Version](https://img.shields.io/badge/Version-v5.3.0-pink?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-MIT-a3e635?style=flat-square)](./LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-97-2dd4bf?style=flat-square)](#-mcp-工具箱全部-97-个)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-94-2dd4bf?style=flat-square)](#-mcp-工具箱全部-94-个)
 [![Edge Functions](https://img.shields.io/badge/Edge_Functions-19-8b5cf6?style=flat-square)](#-后端-edge-functions)
 [![PRs](https://img.shields.io/badge/PRs-1000+-ff69b4?style=flat-square)](#)
 [![PWA](https://img.shields.io/badge/PWA-可装进手机-f59e0b?style=flat-square)](#)
@@ -108,7 +108,7 @@
 
 | MCP 服务器 | 职责 | 工具数 |
 |:---|:---|:---:|
-| `hamster-mcp` | 时间轴 · 待办 · Syzygy Feed · 月度概览 · 备忘录 · 事件集 · 设备同步 · 健康步数 · 游记 | 32 |
+| `hamster-mcp` | 时间轴 · 待办 · 备忘录 · 事件集 · 设备同步 · 健康步数 · 游记 | 29 |
 | `hamster-knowledge-mcp` | 知识库 · 记忆档案 · Wiki · 囤粮处 | 17 |
 | `hamster-reading-mcp` | 阅读记录 · 书摘 · 章节 · 旁批共鸣 · 书籍问答 · 导读/总结 | 18 |
 | `hamster-lounge-mcp` | 仓鼠客厅 · 议事厅 · Syzygy 日记本 · 信箱 | 19 |
@@ -201,7 +201,7 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 ---
 
-### 🧰 MCP 工具箱（全部 97 个）
+### 🧰 MCP 工具箱（全部 94 个）
 
 > 每个 MCP 服务器都是一个独立的 Supabase Edge Function，走 JSON-RPC / MCP Streamable HTTP。
 > 鉴权优先使用 `x-hamster-mcp-key` 请求头（timing-safe 比对）或 Supabase Auth Header；`?key=` 仅为旧客户端迁移期兼容，避免新凭证进入 URL / Access Log。
@@ -209,7 +209,7 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 10-14本地候选新增设备同步只读工具；部署状态另验。
 
-当前源码工具总数：25 + 17 + 18 + 19 + 7 + 4 = **90**。09-29 自由活动候选新增 `cli_set_self_alarm`；10-11 信箱新增 `mailbox_list` / `mailbox_read`；10-13 时间轴新增 `update_timeline`；10-20 游记新增 `list_trips` / `read_trip` / `add_trip` / `update_trip` / `write_trip_plan` / `add_travel_comment`；10-21 游记新增单站编辑 `update_trip_stop` / `delete_trip_stop`；同日下线聊天端少用的 `get_today_syzygy_feed` / `get_syzygy_feed_detail`（Feed 内容照常在 PWA 看）；此前线上核验为 85 项，部署后需重新核验。
+当前源码工具总数：25 + 17 + 18 + 19 + 7 + 4 = **90**。09-29 自由活动候选新增 `cli_set_self_alarm`；10-11 信箱新增 `mailbox_list` / `mailbox_read`；10-13 时间轴新增 `update_timeline`；10-20 游记新增 `list_trips` / `read_trip` / `add_trip` / `update_trip` / `write_trip_plan` / `add_travel_comment`；10-21 游记新增单站编辑 `update_trip_stop` / `delete_trip_stop`；同日下线聊天端少用的 `get_today_syzygy_feed` / `get_syzygy_feed_detail`（Feed 内容照常在 PWA 看）；10-27 Mac mini 月度概览改由本机运行程序读 Feed，下线剩下的 `get_recent_syzygy_feed` / `get_syzygy_feed_by_type` / `get_monthly_overview`，MCP 不再提供 Feed 读取；此前线上核验为 85 项，部署后需重新核验。
 
 本地 `npm run mcp:inventory -- --json` 的 `toolNamesByServer` 给出「server → 排序后的工具名列表」，包含 reading 工厂展开后的 8 个工具。扫描只解析 TypeScript 源码，不加载或执行 Deno 模块；未知动态注册、重复工具名或扫描失败会以非零状态退出。静态 schema 体积仍是估算，精确体积与部署状态用 `--live` 核对。
 
@@ -230,16 +230,13 @@ npm test
 3. 能不能进已有的工厂 config，而不是再手写一个 `registerTool`？优先复用已有模式；本规则不要求为此重构现有工具。
 
 <details open>
-<summary><b>🐹 hamster-mcp</b> — 时间轴 · 待办 · Feed · 备忘录 · 事件集 · 健康步数 · 游记（32）</summary>
+<summary><b>🐹 hamster-mcp</b> — 时间轴 · 待办 · 备忘录 · 事件集 · 健康步数 · 游记（29）</summary>
 
 | 工具 | 作用 |
 |:---|:---|
 | `read_health_steps` | 实时核验独立AI授权，读取与App同版本的七天HealthKit汇总；不触发采集 |
 | `read_device_snapshot` | 读取已同步设备状态，各类独立时间与来源；不触发手机采集 |
 | `cli_set_self_alarm` | 根据本轮 CLI 任务身份给自己预约当天一次闹钟，冲突返回可用时刻 |
-| `get_recent_syzygy_feed` | 读取近 N 天 Feed 摘要，支持类型与状态筛选 |
-| `get_syzygy_feed_by_type` | 按类型取 Feed（晨间分享 / 阅读辅助 / Syzygy 随笔…） |
-| `get_monthly_overview` | 取某月的月度概览内容（默认当月） |
 | `search_timeline` | 按关键词搜索时间轴，按日期倒序 |
 | `recent_timeline` | 取最近的时间轴条目（默认 10 条） |
 | `add_timeline` | 新增时间轴条目（日期 / 摘要 / 记录者 / 来源） |
