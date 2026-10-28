@@ -1,4 +1,4 @@
-import 'npm:@supabase/functions-js@2.110.8/src/edge-runtime.d.ts'
+/// <reference types="npm:@supabase/functions-js@2.110.8/src/edge-runtime.d.ts" />
 import { McpServer } from 'npm:@modelcontextprotocol/sdk@1.25.3/server/mcp.js'
 import { WebStandardStreamableHTTPServerTransport } from 'npm:@modelcontextprotocol/sdk@1.25.3/server/webStandardStreamableHttp.js'
 import { Hono } from 'npm:hono@^4.9.7'
