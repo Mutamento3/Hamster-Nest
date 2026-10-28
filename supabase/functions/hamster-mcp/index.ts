@@ -231,7 +231,7 @@ serveMcp('hamster-mcp', (server) => {
 
   server.registerTool('cli_set_self_alarm', {
     title: 'Set CLI Self Alarm',
-    description: 'CLI 自定唤醒。daily 模式每天一个闹钟；Claude relay 模式只在当前接力轮次保存下一次安排，close_day 当天收工。角色从运行任务派生；09:00–21:00 上海时间，避开固定任务与另一 CLI。接力条串串看得见，不写私密日记。',
+    description: 'CLI 自定唤醒。daily 模式每天一个闹钟；Claude relay 可在当前接力轮次或普通私聊中安排下一次唤醒。私聊会替换尚未执行的预约；close_day 当天收工，当天不重开。角色从运行任务派生；09:00–21:00 上海时间，至少十分钟后，避开固定任务与另一 CLI，到点仍检查聊天避让。接力条串串看得见，不写私密日记。',
     inputSchema: {
       current_task_id: z.string().uuid().describe('运行器注入的本轮 agent_task_id；不可借用其他任务'),
       wake_at: z.string().datetime({ offset: true }).optional().describe('当天未来时刻，带时区；close_day 时省略'),
