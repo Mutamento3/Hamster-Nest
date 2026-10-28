@@ -231,15 +231,17 @@ serveMcp('hamster-mcp', (server) => {
 
   server.registerTool('cli_set_self_alarm', {
     title: 'Set CLI Self Alarm',
-    description: 'CLI 给自己预约当天一次自由活动闹钟。角色由本轮运行任务派生；09:00–21:00 上海时间，避开固定任务、随机活动和另一 CLI。冲突返回附近可用时间；不支持改期或取消。',
+    description: 'CLI 自定唤醒。daily 模式每天一个闹钟；Claude relay 模式只在当前接力轮次保存下一次安排，close_day 当天收工。角色从运行任务派生；09:00–21:00 上海时间，避开固定任务与另一 CLI。接力条串串看得见，不写私密日记。',
     inputSchema: {
       current_task_id: z.string().uuid().describe('运行器注入的本轮 agent_task_id；不可借用其他任务'),
-      wake_at: z.string().datetime({ offset: true }).describe('当天未来时刻，ISO8601，必须带时区，如 +08:00'),
+      wake_at: z.string().datetime({ offset: true }).optional().describe('当天未来时刻，带时区；close_day 时省略'),
+      action: z.enum(['schedule', 'close_day']).default('schedule'),
       note: z.string().max(2000).optional().describe('留给未来自己的一句话，不进入群聊'),
     },
-  }, async ({ current_task_id, wake_at, note }) => {
+  }, async ({ current_task_id, wake_at, note, action }) => {
+    if (action === 'schedule' && !wake_at) return errorResult(new Error('schedule requires wake_at'))
     const { data, error } = await supabase.rpc('cli_set_self_alarm', {
-      p_user: USER_ID, p_task: current_task_id, p_at: wake_at, p_note: note ?? '',
+      p_user: USER_ID, p_task: current_task_id, p_at: action === 'close_day' ? null : wake_at, p_note: note ?? '',
     })
     return error ? errorResult(error) : jsonResult(data)
   })

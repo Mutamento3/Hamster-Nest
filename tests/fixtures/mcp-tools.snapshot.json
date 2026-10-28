@@ -30,6 +30,7 @@
   "hamster-lounge-mcp": [
     "add_diary_comment",
     "add_diary_entry",
+    "append_relay_diary",
     "council_decide",
     "council_list_categories",
     "council_post",

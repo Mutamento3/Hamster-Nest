@@ -868,63 +868,105 @@ export type Database = {
         }
         Relationships: []
       }
+      cli_activity_settings: {
+        Row: {
+          mode: string
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          mode?: string
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          mode?: string
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cli_wake_schedule: {
         Row: {
+          close_day: boolean
           command_id: string | null
           completed_at: string | null
           created_at: string
           created_by_task_id: string | null
           deadline: string | null
+          decision_source: string
           delayed: boolean
           diary_missing: boolean | null
           id: string
           kind: string
           local_date: string
+          next_note: string
+          next_wake_at: string | null
           note: string
+          predecessor_id: string | null
           role: string
+          share_message_id: string | null
           skip_reason: string | null
           started_at: string | null
           status: string
+          summary_missing: boolean | null
           task_id: string | null
           user_id: string
           wake_at: string
         }
         Insert: {
+          close_day?: boolean
           command_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by_task_id?: string | null
           deadline?: string | null
+          decision_source?: string
           delayed?: boolean
           diary_missing?: boolean | null
           id?: string
           kind: string
           local_date: string
+          next_note?: string
+          next_wake_at?: string | null
           note?: string
+          predecessor_id?: string | null
           role: string
+          share_message_id?: string | null
           skip_reason?: string | null
           started_at?: string | null
           status?: string
+          summary_missing?: boolean | null
           task_id?: string | null
           user_id: string
           wake_at: string
         }
         Update: {
+          close_day?: boolean
           command_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by_task_id?: string | null
           deadline?: string | null
+          decision_source?: string
           delayed?: boolean
           diary_missing?: boolean | null
           id?: string
           kind?: string
           local_date?: string
+          next_note?: string
+          next_wake_at?: string | null
           note?: string
+          predecessor_id?: string | null
           role?: string
+          share_message_id?: string | null
           skip_reason?: string | null
           started_at?: string | null
           status?: string
+          summary_missing?: boolean | null
           task_id?: string | null
           user_id?: string
           wake_at?: string
@@ -942,6 +984,20 @@ export type Database = {
             columns: ["created_by_task_id"]
             isOneToOne: false
             referencedRelation: "agent_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cli_wake_schedule_predecessor_id_fkey"
+            columns: ["predecessor_id"]
+            isOneToOne: false
+            referencedRelation: "cli_wake_schedule"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cli_wake_schedule_share_message_id_fkey"
+            columns: ["share_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
@@ -4364,6 +4420,37 @@ export type Database = {
           source: string
           user_id: string
         }[]
+      }
+      cli_activity_set_mode: {
+        Args: { p_mode: string; p_user: string }
+        Returns: Json
+      }
+      cli_relay_append_diary: {
+        Args: {
+          p_allow_shared?: boolean
+          p_content: string
+          p_task: string
+          p_title?: string
+          p_user: string
+        }
+        Returns: Json
+      }
+      cli_relay_plan: {
+        Args: { p_paused: boolean; p_roles: Json; p_user: string }
+        Returns: undefined
+      }
+      cli_relay_set_next: {
+        Args: { p_at?: string; p_note?: string; p_task: string; p_user: string }
+        Returns: Json
+      }
+      cli_relay_share: {
+        Args: {
+          p_content: string
+          p_task: string
+          p_user: string
+          p_wake: string
+        }
+        Returns: Json
       }
       cli_set_self_alarm: {
         Args: { p_at: string; p_note?: string; p_task: string; p_user: string }
