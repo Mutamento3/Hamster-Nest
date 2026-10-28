@@ -11,7 +11,7 @@ create role anon; create role authenticated; create role service_role bypassrls;
 create schema auth;
 create function auth.uid() returns uuid language sql as 'select null::uuid';
 create table auth.users(id uuid primary key);
-create table public.agent_tasks(id uuid primary key default gen_random_uuid(),user_id uuid, status text,result_summary text, payload_json jsonb default '{}',completed_at timestamptz,error text);
+create table public.agent_tasks(id uuid primary key default gen_random_uuid(),user_id uuid, executor text, status text,result_summary text, payload_json jsonb default '{}',completed_at timestamptz,error text);
 create table public.syzygy_commands(id uuid primary key default gen_random_uuid(),user_id uuid,command_type text,status text,idempotency_key text,payload jsonb,completed_at timestamptz,error_message text);
 create unique index command_key on public.syzygy_commands(user_id,idempotency_key) where idempotency_key is not null;
 create table public.prompt_templates(user_id uuid,name text,active boolean,content text);
@@ -36,6 +36,7 @@ async function fixture() {
   await db.exec(sql)
   await db.exec(readFileSync(new URL('../supabase/migrations/20261005114642_cli_activity_dispatch_boundaries.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
   await db.exec(readFileSync(new URL('../supabase/migrations/20261028073454_cli_relay_activity.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261028090941_cli_relay_chat_schedule.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
   await db.exec(`insert into sessions(id,user_id,conversation_kind,conversation_profile_key,handler,session_key) values('66666666-6666-4666-8666-666666666666','${owner}','direct','claude_cli','cli','syzygy_claude_cli')`)
   const query = async (sql, args = []) => (await db.query(sql, args)).rows
   const rpc = async (name, args) => (await query(`select public.${name}(${args.map((_, i) => `$${i + 1}`).join(',')}) as result`, args))[0].result
@@ -46,6 +47,95 @@ async function fixture() {
 }
 
 const claude = 'claude_code_cli_syzygy'
+const chatTask = '88888888-8888-4888-8888-888888888888'
+async function privateChat(f) {
+  await f.query("insert into agent_tasks(id,user_id,executor,status,payload_json) values($1,$2,'claude_code_cli','running',$3)",
+    [chatTask,owner,JSON.stringify({target_role:claude,source:'conversation_dispatch',task_type:'conversation_message',session_id:'66666666-6666-4666-8666-666666666666'})])
+}
+
+test('private chat replaces one planned relay in place; retries and ticks do not duplicate it',async()=>{
+ const f=await fixture();try{
+  await f.tick();await privateChat(f)
+  const [old]=await f.query("select * from cli_wake_schedule where kind='relay'")
+  const schedule=()=>f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00','晚点见'])
+  const first=await schedule();assert.equal(first.ok,true);assert.equal(first.wake_id,old.id)
+  assert.equal((await schedule()).wake_id,first.wake_id);await f.tick()
+  const rows=await f.query("select * from cli_wake_schedule where kind='relay'")
+  assert.equal(rows.length,1);assert.equal(rows[0].decision_source,'model');assert.equal(rows[0].created_by_task_id,chatTask)
+  assert.equal(Date.parse(rows[0].wake_at),Date.parse('2026-09-29T18:40:00+08:00'))
+ }finally{await f.db.close()}
+})
+test('private chat retires an already queued command and the replacement gets a fresh dispatch identity',async()=>{
+ const f=await fixture();try{
+  await f.tick();await f.db.exec("update cli_wake_schedule set wake_at=public.test_now() where kind='relay'; update cli_wake_schedule set status='skipped' where kind='random'");await f.tick();await privateChat(f)
+  const [old]=await f.query("select * from cli_wake_schedule where kind='relay'")
+  assert.equal(old.status,'queued')
+  const next=await f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00','改约'])
+  assert.equal(next.ok,true);assert.notEqual(next.wake_id,old.id)
+  assert.equal((await f.query('select status from syzygy_commands where id=$1',[old.command_id]))[0].status,'failed')
+  assert.equal(await f.rpc('cli_wake_dispatch',[owner,JSON.stringify(roles),false,old.id,old.command_id,chatTask]),null)
+  await f.db.exec("update test_clock set value='2026-09-29T18:40:00+08:00'");await f.tick()
+  const [queued]=await f.query('select * from cli_wake_schedule where id=$1',[next.wake_id])
+  assert.equal(queued.status,'queued');assert.notEqual(queued.command_id,old.command_id)
+  assert.equal((await f.query('select status from syzygy_commands where id=$1',[queued.command_id]))[0].status,'pending')
+ }finally{await f.db.close()}
+})
+test('private chat can reserve before the first tick, and can close a day before any round exists',async()=>{
+ const f=await fixture();try{
+  await privateChat(f)
+  assert.equal((await f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00',''])).ok,true)
+  await f.db.exec('delete from cli_wake_schedule')
+  assert.equal((await f.rpc('cli_set_self_alarm',[owner,chatTask,null,'今天休息'])).day_closed,true)
+  const reopen=await f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00',''])
+  assert.equal(reopen.ok,false);assert.equal(reopen.reason,'day_closed');await f.tick()
+  assert.equal((await f.query("select count(*)::int n from cli_wake_schedule where kind='relay' and status='planned'"))[0].n,0)
+  await f.db.exec("update test_clock set value='2026-09-30T09:00:00+08:00'");await f.tick()
+  assert.equal((await f.query("select count(*)::int n from cli_wake_schedule where kind='relay' and status='planned'"))[0].n,1)
+ }finally{await f.db.close()}
+})
+test('private-chat close_day cancels the next queued wake and preserves the running activity boundary',async()=>{
+ const f=await fixture();try{
+  const current=await start(f);await privateChat(f)
+  assert.equal((await f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00',''])).reason,'relay_running')
+  await finish(f,current);await f.db.exec("update test_clock set value='2026-09-29T16:00:00+08:00'");await f.tick()
+  await f.db.exec("update cli_wake_schedule set wake_at=public.test_now() where kind='relay' and status='planned'");await f.tick()
+  const [queued]=await f.query("select * from cli_wake_schedule where kind='relay' and status='queued'")
+  assert.ok(queued)
+  assert.equal((await f.rpc('cli_set_self_alarm',[owner,chatTask,null,'收工'])).ok,true)
+  assert.equal((await f.query("select count(*)::int n from cli_wake_schedule where kind='relay' and status in ('planned','queued','running')"))[0].n,0)
+  assert.equal((await f.query('select status from syzygy_commands where id=$1',[queued.command_id]))[0].status,'failed')
+  assert.equal((await f.rpc('cli_set_self_alarm',[owner,chatTask,'2026-09-29T18:40:00+08:00',''])).reason,'day_closed')
+ }finally{await f.db.close()}
+})
+test('only a live Claude singleton private-chat task gains scheduling permission',async()=>{
+ const f=await fixture();try{
+  await privateChat(f)
+  const call=(who=owner)=>f.rpc('cli_relay_set_next',[who,chatTask,'2026-09-29T18:40:00+08:00',''])
+  await assert.rejects(call('33333333-3333-4333-8333-333333333333'),/current running/)
+  for(const change of ["status='completed'","completed_at=public.test_now()","executor='codex_cli'","payload_json=payload_json||'{\"task_type\":\"morning_share\"}'","payload_json=payload_json||'{\"target_role\":\"codex_cli_syzygy\"}'","payload_json=payload_json||'{\"session_id\":\"55555555-5555-4555-8555-555555555555\"}'"]){
+   await f.db.exec('begin');try{await f.query(`update agent_tasks set ${change} where id=$1`,[chatTask]);await assert.rejects(call(),/current running/)}finally{await f.db.exec('rollback')}
+  }
+  for(const change of ["conversation_kind='group'","handler='router'","is_archived=true","session_key='other'","user_id='33333333-3333-4333-8333-333333333333'"]){
+   await f.db.exec('begin');try{await f.db.exec(`update sessions set ${change} where session_key='syzygy_claude_cli'`);await assert.rejects(call(),/current running/)}finally{await f.db.exec('rollback')}
+  }
+  assert.equal((await f.query('select count(*)::int n from cli_wake_schedule'))[0].n,0)
+ }finally{await f.db.close()}
+})
+test('private-chat schedules still obey the clock, fixed jobs, Codex spacing, cap and mode',async()=>{
+ const f=await fixture();try{
+  await privateChat(f)
+  const call=at=>f.rpc('cli_relay_set_next',[owner,chatTask,at,''])
+  for(const at of ['2026-09-29T14:09:59+08:00','2026-09-29T21:00:01+08:00','2026-09-30T18:40:00+08:00'])assert.equal((await call(at)).reason,'time_conflict')
+  await f.query('insert into prompt_templates values($1,$2,true,$3)',[owner,'machine_job_fixed',JSON.stringify({targetRole:claude,hour:18,minute:0,daysOfWeek:null})])
+  assert.equal((await call('2026-09-29T18:40:00+08:00')).reason,'time_conflict');await f.db.exec('delete from prompt_templates')
+  await f.query("insert into cli_wake_schedule(user_id,role,local_date,kind,wake_at) values($1,'codex_cli_syzygy','2026-09-29','random','2026-09-29T18:20:00+08:00')",[owner])
+  assert.equal((await call('2026-09-29T18:40:00+08:00')).reason,'time_conflict');await f.db.exec('delete from cli_wake_schedule')
+  await f.query("insert into cli_wake_schedule(user_id,role,local_date,kind,wake_at,started_at,completed_at,status) select $1,$2,'2026-09-29','relay',public.test_now()-interval '2 hours',public.test_now()-interval '2 hours',public.test_now()-interval '1 hour','completed' from generate_series(1,30)",[owner,claude])
+  assert.equal((await call('2026-09-29T18:40:00+08:00')).reason,'daily_cap');await f.db.exec('delete from cli_wake_schedule')
+  await f.rpc('cli_activity_set_mode',[owner,'daily']);assert.equal((await call('2026-09-29T18:40:00+08:00')).reason,'relay_disabled')
+ }finally{await f.db.close()}
+})
+
 async function start(f) {
   await f.query('update agent_tasks set payload_json=$1 where id=$2', [JSON.stringify({target_role: claude}),task])
   await f.tick()
