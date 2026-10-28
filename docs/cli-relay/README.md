@@ -6,7 +6,7 @@ Claude 可由 `daily` 切为 `relay`；迁移默认仍为 daily，Codex 不支�
 
 ## 发布顺序
 
-1. 合并三仓候选后，应用 `20261028065757_cli_relay_activity.sql`；模式仍 daily。
+1. 先应用 `20261028073454_cli_relay_activity.sql`；模式仍 daily；平台实际版本号为 20261028073454。生成数据库类型回填候选后再合并，避免 main 自动 Edge/Pages 发布先于 schema。
 2. 部署 `hamster-mcp` 和 `hamster-lounge-mcp`，只读 `tools/list` 确认新参数与 `append_relay_diary`。
 3. Mini 空闲时部署配套代码并重启；先查正在运行的任务，尤其今天 15:24 的 Claude 每日自由活动，不中断它。保留现场环境、未提交的常驻补丁和与本次无关的文件。
 4. 发布 App 仓 `docs/cli-relay/` 三份云端说明，逐份核对 baseline ID/version/md5，使用现有 append-only 发布 RPC；同一事务发布。固定任务 Feed SOP 不改。

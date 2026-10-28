@@ -35,7 +35,7 @@ async function fixture() {
     .replaceAll('now()', 'public.test_now()')
   await db.exec(sql)
   await db.exec(readFileSync(new URL('../supabase/migrations/20261005114642_cli_activity_dispatch_boundaries.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261028065757_cli_relay_activity.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261028073454_cli_relay_activity.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
   await db.exec(`insert into sessions(id,user_id,conversation_kind,conversation_profile_key,handler,session_key) values('66666666-6666-4666-8666-666666666666','${owner}','direct','claude_cli','cli','syzygy_claude_cli')`)
   const query = async (sql, args = []) => (await db.query(sql, args)).rows
   const rpc = async (name, args) => (await query(`select public.${name}(${args.map((_, i) => `$${i + 1}`).join(',')}) as result`, args))[0].result
