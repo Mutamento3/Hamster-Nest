@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+/// <reference types="npm:@supabase/functions-js@2.110.8/src/edge-runtime.d.ts" />
 import { verifyAuth } from "../_shared/auth.ts";
 import { consumeQuota, quotaExceededResponse } from "../_shared/quota.ts";
 import { getOwnerUserId } from "../_shared/owner.ts";

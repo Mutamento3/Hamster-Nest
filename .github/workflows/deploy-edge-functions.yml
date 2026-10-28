@@ -8,6 +8,7 @@ on:
       - 'supabase/functions/**'
       - 'supabase/config.toml'
       - 'tests/edge-auth.test.mjs'
+      - 'scripts/edge-import-smoke.mjs'
       - '.github/workflows/deploy-edge-functions.yml'
   workflow_dispatch:
 
@@ -30,6 +31,12 @@ jobs:
 
       - name: Run Edge auth regression tests
         run: npm test
+
+      - name: Smoke-test Edge entrypoints without network access
+        run: >-
+          npx --yes deno@2.5.6 run --no-check --no-lock --node-modules-dir=none
+          --config supabase/functions/conversation-dispatch/deno.json
+          --allow-env --allow-read=supabase/functions scripts/edge-import-smoke.mjs
 
       - uses: supabase/setup-cli@v1
         with:

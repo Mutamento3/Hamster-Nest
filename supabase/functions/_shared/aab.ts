@@ -1,4 +1,4 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.110.8'
 import { requireUuidEnv } from './owner.ts'
 
 // All About Book 独立 Supabase 实例（AAB_*）的跨项目访问：
