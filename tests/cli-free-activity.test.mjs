@@ -11,14 +11,14 @@ create role anon; create role authenticated; create role service_role bypassrls;
 create schema auth;
 create function auth.uid() returns uuid language sql as 'select null::uuid';
 create table auth.users(id uuid primary key);
-create table public.agent_tasks(id uuid primary key default gen_random_uuid(),user_id uuid, status text, payload_json jsonb default '{}',completed_at timestamptz,error text);
+create table public.agent_tasks(id uuid primary key default gen_random_uuid(),user_id uuid, status text,result_summary text, payload_json jsonb default '{}',completed_at timestamptz,error text);
 create table public.syzygy_commands(id uuid primary key default gen_random_uuid(),user_id uuid,command_type text,status text,idempotency_key text,payload jsonb,completed_at timestamptz,error_message text);
 create unique index command_key on public.syzygy_commands(user_id,idempotency_key) where idempotency_key is not null;
 create table public.prompt_templates(user_id uuid,name text,active boolean,content text);
-create table public.sessions(id uuid primary key,user_id uuid,conversation_kind text,conversation_profile_key text,handler text);
-create table public.messages(user_id uuid,role text,created_at timestamptz,session_id uuid default '55555555-5555-4555-8555-555555555555',sender_key text default 'chuanchuan',target_sender_keys text[] default '{}');
-insert into sessions values('55555555-5555-4555-8555-555555555555','${owner}','direct','codex_cli','cli');
-create table public.diary_entries(id uuid primary key default gen_random_uuid(),user_id uuid,author text,entry_date date default '2026-09-29',activity_type text,metadata jsonb default '{}',title text,content text);
+create table public.sessions(id uuid primary key,user_id uuid,conversation_kind text,conversation_profile_key text,handler text,session_key text,is_archived boolean default false);
+create table public.messages(id uuid primary key default gen_random_uuid(),content text,client_id uuid,client_created_at timestamptz,meta jsonb,user_id uuid,role text,created_at timestamptz,session_id uuid default '55555555-5555-4555-8555-555555555555',sender_key text default 'chuanchuan',target_sender_keys text[] default '{}');
+insert into sessions(id,user_id,conversation_kind,conversation_profile_key,handler) values('55555555-5555-4555-8555-555555555555','${owner}','direct','codex_cli','cli');
+create table public.diary_entries(id uuid primary key default gen_random_uuid(),user_id uuid,author text,entry_date date default '2026-09-29',activity_type text,visibility text default 'private',metadata jsonb default '{}',title text,content text);
 create table public.agent_events(id bigserial primary key,user_id uuid,actor text,event_type text,entity_type text,entity_id uuid,title text,payload jsonb,importance text);
 create table public.test_clock(value timestamptz);
 insert into test_clock values('2026-09-29T14:00:00+08:00');
@@ -35,6 +35,7 @@ async function fixture() {
     .replaceAll('now()', 'public.test_now()')
   await db.exec(sql)
   await db.exec(readFileSync(new URL('../supabase/migrations/20261005114642_cli_activity_dispatch_boundaries.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261028065757_cli_relay_activity.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
   const query = async (sql, args = []) => (await db.query(sql, args)).rows
   const rpc = async (name, args) => (await query(`select public.${name}(${args.map((_, i) => `$${i + 1}`).join(',')}) as result`, args))[0].result
   const plan = () => rpc('cli_wake_plan_day', [owner, '2026-09-29'])
@@ -293,3 +294,12 @@ test('same-role one-hour spacing waits only inside original grace and respects c
     for (const p of privileges) assert.deepEqual(p, {prosecdef:false,authenticated:false,anon:false,service:true})
   } finally { await f.db.close() }
 })
+
+test('daily activity can still reserve its one later alarm while running',async()=>{
+ const f=await fixture();try{
+  await due(f);await f.tick();const [c]=await f.query('select * from syzygy_commands');
+  await f.rpc('cli_wake_dispatch',[owner,JSON.stringify(roles),false,c.payload.wake_id,c.id,task]);
+  const alarm=await f.rpc('cli_set_self_alarm',[owner,task,'2026-09-29T16:00:00+08:00','later']);
+  assert.equal(alarm.ok,true);
+ }finally{await f.db.close()}
+});

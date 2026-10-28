@@ -336,6 +336,21 @@ serveMcp('hamster-lounge-mcp', (server) => {
     return jsonResult(data)
   })
 
+  server.registerTool('append_relay_diary', {
+    description: 'Claude 接力日记：每天一篇，当前轮追加一段；首次写入推送一次，追加不推送。每轮按 task_id 去重，重试沿用原 ID。保留第一页 task_id，段落记录 task_id/wake_id。默认上锁，不返回全文。',
+    inputSchema: {
+      current_task_id: z.string().uuid(),
+      content: z.string().min(1).max(12000),
+      title: z.string().max(120).optional(),
+      allow_shared: z.boolean().default(false).describe('当天页已翻开时，明确允许将本段公开才传 true'),
+    },
+  }, async ({ current_task_id, content, title, allow_shared }) => {
+    const { data, error } = await supabase.rpc('cli_relay_append_diary', {
+      p_user: USER_ID, p_task: current_task_id, p_content: content, p_title: title ?? null, p_allow_shared: allow_shared,
+    })
+    return error ? errorResult(error) : jsonResult(data)
+  })
+
   server.registerTool('add_diary_entry', {
     title: 'Add Diary Entry',
     description: '写一页日记（默认 private 上锁）。自由活动回执必须用 activity_type=free_activity 并在 metadata.task_id 记录原活动任务 ID；重试或补写沿用原 ID，自动幂等，不重复推送。',
