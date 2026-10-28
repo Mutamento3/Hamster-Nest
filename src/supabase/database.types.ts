@@ -2542,6 +2542,200 @@ export type Database = {
           },
         ]
       }
+      music_now_playing: {
+        Row: {
+          artists: string | null
+          device: string | null
+          duration_ms: number | null
+          pick_id: string | null
+          position_at: string
+          position_ms: number
+          song_id: number | null
+          state: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          artists?: string | null
+          device?: string | null
+          duration_ms?: number | null
+          pick_id?: string | null
+          position_at?: string
+          position_ms?: number
+          song_id?: number | null
+          state?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          artists?: string | null
+          device?: string | null
+          duration_ms?: number | null
+          pick_id?: string | null
+          position_at?: string
+          position_ms?: number
+          song_id?: number | null
+          state?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "music_now_playing_pick_fk"
+            columns: ["user_id", "pick_id"]
+            isOneToOne: false
+            referencedRelation: "music_song_picks"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
+      }
+      music_search_requests: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          query: string
+          requested_by: string
+          resolved_at: string | null
+          results: Json | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          query: string
+          requested_by?: string
+          resolved_at?: string | null
+          results?: Json | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          query?: string
+          requested_by?: string
+          resolved_at?: string | null
+          results?: Json | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      music_song_picks: {
+        Row: {
+          album: string | null
+          artists: string | null
+          cover_url: string | null
+          created_at: string
+          duration_ms: number | null
+          encrypted_id: string | null
+          id: string
+          note: string | null
+          picked_by: string
+          playlist_sync_status: string
+          playlist_synced_at: string | null
+          song_id: number
+          status: string
+          sync_error: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          album?: string | null
+          artists?: string | null
+          cover_url?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          encrypted_id?: string | null
+          id?: string
+          note?: string | null
+          picked_by?: string
+          playlist_sync_status?: string
+          playlist_synced_at?: string | null
+          song_id: number
+          status?: string
+          sync_error?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          album?: string | null
+          artists?: string | null
+          cover_url?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          encrypted_id?: string | null
+          id?: string
+          note?: string | null
+          picked_by?: string
+          playlist_sync_status?: string
+          playlist_synced_at?: string | null
+          song_id?: number
+          status?: string
+          sync_error?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      music_tracks: {
+        Row: {
+          attempts: number
+          error: string | null
+          lyric: string | null
+          play_url: string | null
+          quality: string | null
+          requested_at: string
+          resolved_at: string | null
+          song_id: number
+          status: string
+          translated_lyric: string | null
+          updated_at: string
+          url_expires_at: string | null
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          error?: string | null
+          lyric?: string | null
+          play_url?: string | null
+          quality?: string | null
+          requested_at?: string
+          resolved_at?: string | null
+          song_id: number
+          status?: string
+          translated_lyric?: string | null
+          updated_at?: string
+          url_expires_at?: string | null
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          error?: string | null
+          lyric?: string | null
+          play_url?: string | null
+          quality?: string | null
+          requested_at?: string
+          resolved_at?: string | null
+          song_id?: number
+          status?: string
+          translated_lyric?: string | null
+          updated_at?: string
+          url_expires_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_events: {
         Row: {
           agent_event_id: number | null
@@ -4816,6 +5010,30 @@ export type Database = {
       mark_wechat_message_sent: {
         Args: { p_message_id: string; p_worker_id: string }
         Returns: boolean
+      }
+      music_request_tracks: {
+        Args: { p_song_ids: number[] }
+        Returns: {
+          attempts: number
+          error: string | null
+          lyric: string | null
+          play_url: string | null
+          quality: string | null
+          requested_at: string
+          resolved_at: string | null
+          song_id: number
+          status: string
+          translated_lyric: string | null
+          updated_at: string
+          url_expires_at: string | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "music_tracks"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       prompt_template_publish: {
         Args: {

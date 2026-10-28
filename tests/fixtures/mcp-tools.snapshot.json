@@ -25,7 +25,13 @@
     "luckin_call",
     "luckin_list_tools",
     "mcd_call",
-    "mcd_list_tools"
+    "mcd_list_tools",
+    "music_list_picks",
+    "music_now_playing",
+    "music_pick_song",
+    "music_search",
+    "music_search_result",
+    "music_update_pick_note"
   ],
   "hamster-lounge-mcp": [
     "add_diary_comment",

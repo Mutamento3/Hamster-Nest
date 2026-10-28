@@ -1,4 +1,5 @@
 import { z } from 'npm:zod@^4.1.13'
+import { registerMusicTools } from './music.ts'
 import { serveMcp, supabase } from '../_shared/mcp_common.ts'
 import { formatToolCallResult, pruneJson, slimLuckinPayload, slimMcdPayload, slimToolList } from './slim.ts'
 
@@ -131,6 +132,7 @@ function amapMcpCall(method: string, params: Record<string, unknown> = {}) {
 }
 
 serveMcp('hamster-life-mcp', (server) => {
+  registerMusicTools(server)
   server.registerTool('generate_tts', {
     title: 'Generate TTS Audio',
     description: '生成 Syzygy 语音（ElevenLabs），返回 7 天有效的签名音频 URL。',
@@ -205,7 +207,7 @@ serveMcp('hamster-life-mcp', (server) => {
     annotations: { openWorldHint: true },
     inputSchema: {
       tool_name: z.string().describe('工具名称'),
-      arguments: z.record(z.unknown()).optional().describe('参数'),
+      arguments: z.record(z.string(), z.unknown()).optional().describe('参数'),
       raw: z.boolean().optional().describe('true 时返回未瘦身的原始结果，默认 false'),
     },
   }, async ({ tool_name, arguments: args, raw }) => {
@@ -236,7 +238,7 @@ serveMcp('hamster-life-mcp', (server) => {
     annotations: { openWorldHint: true },
     inputSchema: {
       tool_name: z.string().describe('工具名称'),
-      arguments: z.record(z.unknown()).optional().describe('参数'),
+      arguments: z.record(z.string(), z.unknown()).optional().describe('参数'),
       raw: z.boolean().optional().describe('true 时返回未瘦身的原始结果，默认 false'),
     },
   }, async ({ tool_name, arguments: args, raw }) => {
@@ -267,7 +269,7 @@ serveMcp('hamster-life-mcp', (server) => {
     annotations: { openWorldHint: true },
     inputSchema: {
       tool_name: z.string().describe('工具名称'),
-      arguments: z.record(z.unknown()).optional().describe('参数'),
+      arguments: z.record(z.string(), z.unknown()).optional().describe('参数'),
       raw: z.boolean().optional().describe('true 时返回未瘦身的原始结果，默认 false'),
     },
   }, async ({ tool_name, arguments: args, raw }) => {

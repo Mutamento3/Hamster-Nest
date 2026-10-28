@@ -10,7 +10,7 @@
 
 [![Version](https://img.shields.io/badge/Version-v5.3.0-pink?style=flat-square)](#)
 [![License](https://img.shields.io/badge/License-MIT-a3e635?style=flat-square)](./LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-95-2dd4bf?style=flat-square)](#-mcp-工具箱全部-95-个)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-101-2dd4bf?style=flat-square)](#-mcp-工具箱全部-101-个)
 [![Edge Functions](https://img.shields.io/badge/Edge_Functions-19-8b5cf6?style=flat-square)](#-后端-edge-functions)
 [![PRs](https://img.shields.io/badge/PRs-1000+-ff69b4?style=flat-square)](#)
 [![PWA](https://img.shields.io/badge/PWA-可装进手机-f59e0b?style=flat-square)](#)
@@ -112,7 +112,7 @@
 | `hamster-knowledge-mcp` | 知识库 · 记忆档案 · Wiki · 囤粮处 | 17 |
 | `hamster-reading-mcp` | 阅读记录 · 书摘 · 章节 · 旁批共鸣 · 书籍问答 · 导读/总结 | 18 |
 | `hamster-lounge-mcp` | 仓鼠客厅 · 议事厅 · Syzygy 日记本 · 信箱 | 20 |
-| `hamster-life-mcp` | 高德地图 · 瑞幸 · 麦当劳 · TTS 语音 | 7 |
+| `hamster-life-mcp` | 高德地图 · 瑞幸 · 麦当劳 · TTS 语音 · 音乐 | 13 |
 | `hamster-print-mcp` | Mac mini 动作 · 远程打印 · X/Twitter 发帖 | 4 |
 
 **AI 模型：** 统一经 **OpenRouter / 自定义 Provider** 接入（`llm_providers` 表按用户配置），不绑定任何单一模型；支持深度思考、长上下文压缩、工具循环。
@@ -201,7 +201,7 @@ V4.1 起，两个 CLI 还各自收敛到一个持久的「正史会话」（dual
 
 ---
 
-### 🧰 MCP 工具箱（全部 95 个）
+### 🧰 MCP 工具箱（全部 101 个）
 
 > 每个 MCP 服务器都是一个独立的 Supabase Edge Function，走 JSON-RPC / MCP Streamable HTTP。
 > 鉴权优先使用 `x-hamster-mcp-key` 请求头（timing-safe 比对）或 Supabase Auth Header；`?key=` 仅为旧客户端迁移期兼容，避免新凭证进入 URL / Access Log。
@@ -368,7 +368,7 @@ npm test
 </details>
 
 <details>
-<summary><b>🌏 hamster-life-mcp</b> — 地图 · 咖啡 · 麦当劳 · TTS（7）</summary>
+<summary><b>🌏 hamster-life-mcp</b> — 地图 · 咖啡 · 麦当劳 · TTS · 音乐（13）</summary>
 
 > 除 TTS 外，其余是 **MCP-to-MCP 代理**：完整走 `initialize → notifications/initialized → tools/call` 握手，转发到第三方 MCP。
 
@@ -381,6 +381,14 @@ npm test
 | `luckin_call` | 按名调用某个瑞幸工具 |
 | `mcd_list_tools` | 列出麦当劳 MCP 的全部工具 |
 | `mcd_call` | 按名调用某个麦当劳工具 |
+
+
+| `music_search` | 提交或复用 Mini 搜歌请求 |
+| `music_search_result` | 按请求 ID 读取真实歌曲结果 |
+| `music_pick_song` | 点歌并记录署名与理由，重复点歌保留原记录 |
+| `music_list_picks` | 分页读取歌单与点歌理由 |
+| `music_update_pick_note` | 按版本修改点歌理由 |
+| `music_now_playing` | 读取最近上报的播放状态与推算进度 |
 
 </details>
 
