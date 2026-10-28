@@ -4519,6 +4519,15 @@ export type Database = {
         }
         Returns: Json
       }
+      conversation_cli_tool_progress: {
+        Args: {
+          p_user_id: string
+          p_task_id: string
+          p_started_at: string
+          p_progress: Json
+        }
+        Returns: boolean
+      }
       conversation_dispatch_cancel_pending: {
         Args: { p_task_id: string; p_user_id: string }
         Returns: Json
