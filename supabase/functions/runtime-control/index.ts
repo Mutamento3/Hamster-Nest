@@ -1,4 +1,4 @@
-import '@supabase/functions-js/edge-runtime.d.ts'
+/// <reference types="npm:@supabase/functions-js@2.110.8/src/edge-runtime.d.ts" />
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getOwnerUserId } from '../_shared/owner.ts'
 import {

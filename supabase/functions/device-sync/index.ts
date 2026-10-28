@@ -1,4 +1,4 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.110.8'
 import { verifyConversationUser } from '../conversation-dispatch/auth.ts'
 import { getOwnerUserId } from '../_shared/owner.ts'
 import { getSupabaseAdminKey } from '../_shared/supabase_secret.ts'

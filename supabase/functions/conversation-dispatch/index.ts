@@ -1,6 +1,6 @@
+/// <reference types="npm:@supabase/functions-js@2.110.8/src/edge-runtime.d.ts" />
 import { handleLoungeRequest, handleLoungeWorker } from './lounge.ts'
 import { verifyConversationUser } from './auth.ts'
-import '@supabase/functions-js/edge-runtime.d.ts'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getOwnerUserId } from '../_shared/owner.ts'
 import { getSupabaseAdminKey } from '../_shared/supabase_secret.ts'
