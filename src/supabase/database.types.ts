@@ -4503,6 +4503,15 @@ export type Database = {
         Args: { p_scope: string; p_user_id: string }
         Returns: number
       }
+      conversation_cli_tool_progress: {
+        Args: {
+          p_progress: Json
+          p_started_at: string
+          p_task_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       conversation_companion_publish_proactive: {
         Args: {
           p_client_id: string
@@ -4518,15 +4527,6 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
-      }
-      conversation_cli_tool_progress: {
-        Args: {
-          p_user_id: string
-          p_task_id: string
-          p_started_at: string
-          p_progress: Json
-        }
-        Returns: boolean
       }
       conversation_dispatch_cancel_pending: {
         Args: { p_task_id: string; p_user_id: string }
