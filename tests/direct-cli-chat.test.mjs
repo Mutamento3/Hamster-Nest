@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 import {PGlite} from '@electric-sql/pglite';
-const migration=readFileSync(new URL('../supabase/migrations/20261031080950_direct_cli_chat_commit.sql',import.meta.url),'utf8');
+const migration=readFileSync(new URL('../supabase/migrations/20261031085238_direct_cli_chat_commit.sql',import.meta.url),'utf8');
 const durable=readFileSync(new URL('../supabase/migrations/20260728131144_v4_1_conversation_cli_durable_tasks.sql',import.meta.url),'utf8');
 const routine=name=>{
   const start=durable.indexOf(`create or replace function ${name}(`);
