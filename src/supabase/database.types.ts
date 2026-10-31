@@ -891,6 +891,7 @@ export type Database = {
       }
       cli_wake_schedule: {
         Row: {
+          alarm_reason: string
           close_day: boolean
           command_id: string | null
           completed_at: string | null
@@ -899,6 +900,7 @@ export type Database = {
           deadline: string | null
           decision_source: string
           delayed: boolean
+          delegated_from: string | null
           diary_missing: boolean | null
           id: string
           kind: string
@@ -907,6 +909,7 @@ export type Database = {
           next_wake_at: string | null
           note: string
           predecessor_id: string | null
+          requested_wake_at: string | null
           role: string
           share_message_id: string | null
           skip_reason: string | null
@@ -918,6 +921,7 @@ export type Database = {
           wake_at: string
         }
         Insert: {
+          alarm_reason?: string
           close_day?: boolean
           command_id?: string | null
           completed_at?: string | null
@@ -926,6 +930,7 @@ export type Database = {
           deadline?: string | null
           decision_source?: string
           delayed?: boolean
+          delegated_from?: string | null
           diary_missing?: boolean | null
           id?: string
           kind: string
@@ -934,6 +939,7 @@ export type Database = {
           next_wake_at?: string | null
           note?: string
           predecessor_id?: string | null
+          requested_wake_at?: string | null
           role: string
           share_message_id?: string | null
           skip_reason?: string | null
@@ -945,6 +951,7 @@ export type Database = {
           wake_at: string
         }
         Update: {
+          alarm_reason?: string
           close_day?: boolean
           command_id?: string | null
           completed_at?: string | null
@@ -953,6 +960,7 @@ export type Database = {
           deadline?: string | null
           decision_source?: string
           delayed?: boolean
+          delegated_from?: string | null
           diary_missing?: boolean | null
           id?: string
           kind?: string
@@ -961,6 +969,7 @@ export type Database = {
           next_wake_at?: string | null
           note?: string
           predecessor_id?: string | null
+          requested_wake_at?: string | null
           role?: string
           share_message_id?: string | null
           skip_reason?: string | null
@@ -4615,6 +4624,16 @@ export type Database = {
           user_id: string
         }[]
       }
+      cli_action_append_diary: {
+        Args: {
+          p_actions: Json
+          p_allow_shared?: boolean
+          p_diary?: string
+          p_task: string
+          p_user: string
+        }
+        Returns: Json
+      }
       cli_activity_set_mode: {
         Args: { p_mode: string; p_user: string }
         Returns: Json
@@ -4643,6 +4662,17 @@ export type Database = {
           p_task: string
           p_user: string
           p_wake: string
+        }
+        Returns: Json
+      }
+      cli_schedule_action_alarm: {
+        Args: {
+          p_at: string
+          p_note?: string
+          p_reason?: string
+          p_target_role?: string
+          p_task: string
+          p_user: string
         }
         Returns: Json
       }

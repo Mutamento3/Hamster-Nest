@@ -3,7 +3,7 @@ import { getRecordSourceLabel } from '../constants/recordSources'
 // Syzygy 日记本共用：标签、日期工具、会话内解锁记忆。
 
 export const DIARY_ACTIVITY_LABELS: Record<string, string> = {
-  free_activity: '自由活动',
+  free_activity: '自主行动',
   daily_note: '随记',
 }
 

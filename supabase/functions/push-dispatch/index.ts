@@ -13,8 +13,7 @@
 // when the header is absent or the Vault secret is unreadable.
 //
 // Importance routing (V4.0): low → never push; normal/high/urgent → push
-// immediately; Beijing quiet hours [23:00, 08:00) suppress everything except
-// urgent. Digest/merge pushes for normal importance are V4.1 scope.
+// immediately, at any hour as explicitly requested by the owner.
 // Every attempt lands in notification_events (queued/sent/failed/skipped).
 // Conversation pushes may carry a user-authorized, bounded model-content preview.
 // Tokens and raw event payloads never enter visible notification content.
@@ -22,8 +21,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { timingSafeEqual } from '../_shared/auth.ts'
 import { consumeQuota } from '../_shared/quota.ts'
-import { isDiaryQuietTime } from './diary-policy.ts'
-import { getBeijingDate } from '../_shared/time.ts'
 import { getSupabaseAdminKey } from '../_shared/supabase_secret.ts'
 import {
   normalizeConversationPushPreview,
@@ -32,8 +29,6 @@ import {
 } from './preview.ts'
 
 const PUSH_DAILY_LIMIT = 200
-const QUIET_HOUR_START = 23 // 北京时区静默时段 [23:00, 08:00)，urgent 豁免
-const QUIET_HOUR_END = 8
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts'
 const RECEIPT_WINDOW_HOURS = 24
@@ -86,8 +81,6 @@ const verifyDispatchSecret = async (
   }
   return timingSafeEqual(provided, cachedSecret)
 }
-
-const isQuietHour = (hour: number) => hour >= QUIET_HOUR_START || hour < QUIET_HOUR_END
 
 // Navigation data mirrors the {screen, params, url} contract shared with
 // sw.js and the Expo app; url is the web-only fallback.
@@ -173,10 +166,6 @@ const dispatchEvent = async (
     return skipEvent(supabase, event, 'low importance')
   }
   const isCliDiary = event.event_type === 'cli_diary_created' && event.entity_type === 'diary_entry'
-  if (isCliDiary ? (isDiaryQuietTime(new Date(event.created_at)) || isDiaryQuietTime())
-    : event.importance !== 'urgent' && isQuietHour(getBeijingDate().hour)) {
-    return skipEvent(supabase, event, 'quiet hours')
-  }
 
   const quota = isCliDiary ? { allowed: true } : await consumeQuota('push', event.user_id, PUSH_DAILY_LIMIT)
   if (!quota.allowed) {
