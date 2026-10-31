@@ -4752,6 +4752,32 @@ export type Database = {
         }
         Returns: Json
       }
+      conversation_direct_commit: {
+        Args: {
+          p_accepted_at: string
+          p_audit?: Json
+          p_client_id: string
+          p_completed_at: string
+          p_content: string
+          p_reply: string
+          p_sender: string
+          p_session_id: string
+          p_status?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      conversation_direct_prepare: {
+        Args: {
+          p_accepted_at: string
+          p_client_id: string
+          p_content: string
+          p_sender: string
+          p_session_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       conversation_dispatch_cancel_pending: {
         Args: { p_task_id: string; p_user_id: string }
         Returns: Json
