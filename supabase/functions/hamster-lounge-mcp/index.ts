@@ -337,7 +337,7 @@ serveMcp('hamster-lounge-mcp', (server) => {
   })
 
   server.registerTool('append_relay_diary', {
-    description: 'Claude 接力日记：每天一篇，当前轮追加一段；首次写入推送一次，追加不推送。每轮按 task_id 去重，重试沿用原 ID。保留第一页 task_id，段落记录 task_id/wake_id。默认上锁，不返回全文。',
+    description: '旧Claude relay兼容日记：每天一篇，当前轮追加一段；daily自主行动由Runtime记录actions/diary，不调用本工具；首次写入推送一次，追加不推送。每轮按 task_id 去重，重试沿用原 ID。保留第一页 task_id，段落记录 task_id/wake_id。默认上锁，不返回全文。',
     inputSchema: {
       current_task_id: z.string().uuid(),
       content: z.string().min(1).max(12000),

@@ -230,18 +230,21 @@ serveMcp('hamster-mcp', (server) => {
   })
 
   server.registerTool('cli_set_self_alarm', {
-    title: 'Set CLI Self Alarm',
-    description: 'CLI 自定唤醒。daily 模式每天一个闹钟；Claude relay 可在当前接力轮次或普通私聊中安排下一次唤醒。私聊会替换尚未执行的预约；close_day 当天收工，当天不重开。角色从运行任务派生；09:00–21:00 上海时间，至少十分钟后，避开固定任务与另一 CLI，到点仍检查聊天避让。接力条串串看得见，不写私密日记。',
+    title: '安排自主行动闹钟',
+    description: 'Claude/Codex 自主行动：每天13–21点随机一次，之后由CLI自己决定是否预约，可多次；不预约就没有自动续链。当前运行任务可约未来24小时（可跨日），同CLI至少隔1小时、跨CLI半小时、固定任务前后1小时。窗口外须reason并在干活沙发留言；target_role可托付另一CLI，note写明为何来、先看什么。只有ok=true才算安排成功。close_day取消本人当天未执行预约，当天不重开。旧relay模式仍沿用原规则。',
     inputSchema: {
-      current_task_id: z.string().uuid().describe('运行器注入的本轮 agent_task_id；不可借用其他任务'),
-      wake_at: z.string().datetime({ offset: true }).optional().describe('当天未来时刻，带时区；close_day 时省略'),
+      current_task_id: z.string().uuid().describe('运行器注入的本轮 agent_task_id'),
+      wake_at: z.string().datetime({ offset: true }).optional().describe('未来24小时内，带时区；close_day省略'),
       action: z.enum(['schedule', 'close_day']).default('schedule'),
-      note: z.string().max(2000).optional().describe('留给未来自己的一句话，不进入群聊'),
+      note: z.string().max(2000).optional().describe('下轮行动和要读的线索；托付必填，串串可见'),
+      target_role: z.enum(['codex_cli_syzygy','claude_code_cli_syzygy']).optional().describe('省略为自己；托付时填接手端口'),
+      reason: z.string().max(2000).optional().describe('13–21点以外必须说明理由，并在干活沙发留一句'),
     },
-  }, async ({ current_task_id, wake_at, note, action }) => {
+  }, async ({ current_task_id, wake_at, note, action, target_role, reason }) => {
     if (action === 'schedule' && !wake_at) return errorResult(new Error('schedule requires wake_at'))
-    const { data, error } = await supabase.rpc('cli_set_self_alarm', {
-      p_user: USER_ID, p_task: current_task_id, p_at: action === 'close_day' ? null : wake_at, p_note: note ?? '',
+    const { data, error } = await supabase.rpc('cli_schedule_action_alarm', {
+      p_user: USER_ID, p_task: current_task_id, p_at: action === 'close_day' ? null : wake_at,
+      p_note: note ?? '', p_target_role: target_role ?? null, p_reason: reason ?? '',
     })
     return error ? errorResult(error) : jsonResult(data)
   })
