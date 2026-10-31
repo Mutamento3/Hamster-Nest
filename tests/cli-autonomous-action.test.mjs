@@ -42,7 +42,7 @@ async function fixture() {
   const rpc = async (name, args) => (await query(`select public.${name}(${args.map((_, i) => `$${i + 1}`).join(',')}) as result`, args))[0].result
   const plan = () => rpc('cli_wake_plan_day', [owner, '2026-09-29'])
   const tick = (enabled = roles, paused = false) => rpc('cli_wake_dispatch', [owner, JSON.stringify(enabled), paused])
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261031053036_cli_autonomous_action.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261031065834_cli_autonomous_action.sql', import.meta.url), 'utf8').replaceAll('now()', 'public.test_now()'))
   await db.exec("update sessions set session_key='syzygy_codex_cli' where conversation_profile_key='codex_cli'")
   return { db, query, rpc, plan, tick }
 }
